@@ -1,0 +1,553 @@
+openapi: 3.0.3
+info:
+  title: Database Query Tool API
+  description: API for managing database connections, browsing schemas, and executing read-only SQL queries
+  version: 1.0.0
+  contact:
+    name: DB Query Tool
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local development server
+
+tags:
+  - name: databases
+    description: Database connection management
+  - name: queries
+    description: SQL query execution and natural language generation
+
+paths:
+  /dbs:
+    get:
+      tags:
+        - databases
+      summary: List all saved database connections
+      description: Returns a list of all saved database connections with their metadata
+      operationId: listDatabases
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DatabaseConnection'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+
+  /dbs/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        description: Unique name of the database connection
+        schema:
+          type: string
+          pattern: '^[a-zA-Z0-9-]+$'
+
+    put:
+      tags:
+        - databases
+      summary: Create or update a database connection
+      description: Creates a new database connection or updates an existing one. Validates connection and fetches metadata.
+      operationId: createOrUpdateDatabase
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  description: PostgreSQL connection URL
+                  example: "postgres://postgres:postgres@localhost:5432/postgres"
+      responses:
+        '200':
+          description: Connection updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseConnection'
+        '201':
+          description: Connection created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseConnection'
+        '400':
+          description: Invalid request (bad URL format, connection test failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+
+    get:
+      tags:
+        - databases
+      summary: Get database connection and metadata
+      description: Returns connection details and cached schema metadata (tables, views, columns)
+      operationId: getDatabase
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - connection
+                  - metadata
+                properties:
+                  connection:
+                    $ref: '#/components/schemas/DatabaseConnection'
+                  metadata:
+                    $ref: '#/components/schemas/SchemaMetadata'
+        '404':
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+
+    delete:
+      tags:
+        - databases
+      summary: Delete a database connection
+      description: Removes a database connection and all associated metadata
+      operationId: deleteDatabase
+      responses:
+        '204':
+          description: Connection deleted successfully
+        '404':
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+
+  /dbs/{name}/refresh:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        description: Unique name of the database connection
+        schema:
+          type: string
+
+    post:
+      tags:
+        - databases
+      summary: Refresh database metadata
+      description: Re-fetches schema metadata from the database (tables, views, columns)
+      operationId: refreshMetadata
+      responses:
+        '200':
+          description: Metadata refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaMetadata'
+        '404':
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+
+  /dbs/{name}/query:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        description: Unique name of the database connection
+        schema:
+          type: string
+
+    post:
+      tags:
+        - queries
+      summary: Execute SQL query
+      description: |
+        Executes a read-only SQL query on the specified database.
+        - Only SELECT statements allowed
+        - Multi-statement queries rejected
+        - Automatic LIMIT 1000 added if not present
+        - SQL validated with sqlglot parser
+      operationId: executeQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - sql
+              properties:
+                sql:
+                  type: string
+                  description: SQL SELECT query to execute
+                  example: "SELECT * FROM users WHERE active = true"
+      responses:
+        '200':
+          description: Query executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryResult'
+        '400':
+          description: Invalid query (syntax error, not SELECT, multi-statement)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+        '404':
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+        '500':
+          description: Query execution error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+
+  /dbs/{name}/query/natural:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        description: Unique name of the database connection
+        schema:
+          type: string
+
+    post:
+      tags:
+        - queries
+      summary: Generate SQL from natural language
+      description: |
+        Uses OpenAI LLM to generate SQL from natural language description.
+        - Includes database schema as context
+        - Returns generated SQL for user review
+        - Does NOT execute the query automatically
+        - Generated SQL still subject to validation rules
+      operationId: generateSqlFromNaturalLanguage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - prompt
+              properties:
+                prompt:
+                  type: string
+                  description: Natural language description of desired query
+                  example: "Show me all active users created in the last 30 days"
+      responses:
+        '200':
+          description: SQL generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - generatedSql
+                  - context
+                properties:
+                  generatedSql:
+                    type: string
+                    description: Generated SQL query
+                  context:
+                    $ref: '#/components/schemas/NaturalLanguageContext'
+        '400':
+          description: Invalid prompt or generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+        '404':
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+        '500':
+          description: Server error or LLM API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryError'
+
+components:
+  schemas:
+    DatabaseConnection:
+      type: object
+      required:
+        - name
+        - url
+        - createdAt
+        - updatedAt
+        - status
+      properties:
+        name:
+          type: string
+          pattern: '^[a-zA-Z0-9-]+$'
+          minLength: 1
+          maxLength: 50
+          description: Unique connection identifier
+          example: "production"
+        url:
+          type: string
+          format: uri
+          description: PostgreSQL connection URL (password may be masked in responses)
+          example: "postgres://user:****@localhost:5432/mydb"
+        createdAt:
+          type: string
+          format: date-time
+          description: When connection was created
+        updatedAt:
+          type: string
+          format: date-time
+          description: When connection was last updated
+        status:
+          type: string
+          enum: [active, error, unknown]
+          description: Connection status
+
+    SchemaMetadata:
+      type: object
+      required:
+        - connectionName
+        - databaseName
+        - fetchedAt
+        - tables
+        - views
+      properties:
+        connectionName:
+          type: string
+          description: Reference to database connection
+        databaseName:
+          type: string
+          description: Name of the database
+        fetchedAt:
+          type: string
+          format: date-time
+          description: When metadata was fetched
+        tables:
+          type: array
+          items:
+            $ref: '#/components/schemas/TableMetadata'
+          description: List of tables
+        views:
+          type: array
+          items:
+            $ref: '#/components/schemas/TableMetadata'
+          description: List of views
+
+    TableMetadata:
+      type: object
+      required:
+        - schemaName
+        - tableName
+        - tableType
+        - columns
+      properties:
+        schemaName:
+          type: string
+          description: Schema name (e.g., "public")
+          example: "public"
+        tableName:
+          type: string
+          description: Table or view name
+          example: "users"
+        tableType:
+          type: string
+          enum: [TABLE, VIEW]
+          description: Type of object
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/ColumnMetadata'
+          description: List of columns
+        primaryKeys:
+          type: array
+          items:
+            type: string
+          description: List of primary key column names
+
+    ColumnMetadata:
+      type: object
+      required:
+        - columnName
+        - dataType
+        - isNullable
+      properties:
+        columnName:
+          type: string
+          description: Column name
+          example: "user_id"
+        dataType:
+          type: string
+          description: PostgreSQL data type
+          example: "integer"
+        isNullable:
+          type: boolean
+          description: Whether column accepts NULL
+        defaultValue:
+          type: string
+          nullable: true
+          description: Default value expression
+        maxLength:
+          type: integer
+          nullable: true
+          description: Maximum length for character types
+        numericPrecision:
+          type: integer
+          nullable: true
+          description: Precision for numeric types
+
+    QueryResult:
+      type: object
+      required:
+        - columns
+        - rows
+        - rowCount
+        - executionTime
+        - query
+      properties:
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/ColumnDefinition'
+          description: Column definitions
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: Query result rows (max 1000)
+        rowCount:
+          type: integer
+          description: Number of rows returned
+          maximum: 1000
+        executionTime:
+          type: number
+          format: float
+          description: Query execution time in seconds
+        query:
+          type: string
+          description: The actual SQL that was executed
+
+    ColumnDefinition:
+      type: object
+      required:
+        - name
+        - type
+      properties:
+        name:
+          type: string
+          description: Column name
+        type:
+          type: string
+          description: Column data type
+
+    QueryError:
+      type: object
+      required:
+        - errorType
+        - errorCode
+        - message
+      properties:
+        errorType:
+          type: string
+          enum: [connection, syntax, validation, execution, timeout]
+          description: Category of error
+        errorCode:
+          type: string
+          description: Machine-readable error code
+          example: "SQL_SYNTAX_ERROR"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "SQL syntax error: unexpected token 'FROM'"
+        details:
+          type: string
+          nullable: true
+          description: Technical details for debugging
+        query:
+          type: string
+          nullable: true
+          description: The query that caused the error
+
+    NaturalLanguageContext:
+      type: object
+      required:
+        - connectionName
+        - userPrompt
+        - relevantTables
+        - schemaContext
+        - generatedSql
+        - timestamp
+      properties:
+        connectionName:
+          type: string
+          description: Target database connection
+        userPrompt:
+          type: string
+          description: User's natural language question
+        relevantTables:
+          type: array
+          items:
+            type: string
+          description: Tables relevant to the query
+        schemaContext:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/TableMetadata'
+          description: Schema metadata for relevant tables
+        generatedSql:
+          type: string
+          description: SQL generated by LLM
+        timestamp:
+          type: string
+          format: date-time
+          description: When generation occurred
+
+  securitySchemes: {}
+
+security: []
