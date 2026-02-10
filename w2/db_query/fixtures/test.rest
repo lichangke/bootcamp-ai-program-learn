@@ -1,0 +1,64 @@
+@baseUrl = http://127.0.0.1:8000
+@apiBase = {{baseUrl}}/api/v1
+@dbName = demo
+@pgUrl = postgres://postgres:postgres@localhost:5432/postgres
+
+###
+# Health check (implemented)
+GET {{baseUrl}}/health
+Accept: application/json
+
+###
+# List connections
+GET {{apiBase}}/dbs
+Accept: application/json
+
+###
+# Create or update connection
+PUT {{apiBase}}/dbs/{{dbName}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "url": "{{pgUrl}}"
+}
+
+###
+# Get one connection with metadata
+GET {{apiBase}}/dbs/{{dbName}}
+Accept: application/json
+
+###
+# Refresh metadata
+POST {{apiBase}}/dbs/{{dbName}}/refresh
+Accept: application/json
+
+###
+# Execute SQL query
+POST {{apiBase}}/dbs/{{dbName}}/query
+Content-Type: application/json
+Accept: application/json
+
+{
+  "sql": "SELECT 1 AS value"
+}
+
+###
+# Generate SQL from natural language
+POST {{apiBase}}/dbs/{{dbName}}/query/natural
+Content-Type: application/json
+Accept: application/json
+
+{
+  "prompt": "List the latest 10 rows from users table"
+}
+
+###
+# Delete connection
+DELETE {{apiBase}}/dbs/{{dbName}}
+Accept: application/json
+
+###
+# Verify deletion
+GET {{apiBase}}/dbs/{{dbName}}
+Accept: application/json

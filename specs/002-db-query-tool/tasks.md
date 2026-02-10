@@ -25,27 +25,27 @@
 
 ### Backend Setup
 
-- [ ] T001 Create backend project structure at w2/db_query/backend/
-- [ ] T002 Initialize Python project with uv in w2/db_query/backend/pyproject.toml
-- [ ] T003 [P] Configure mypy for type checking in w2/db_query/backend/pyproject.toml
-- [ ] T004 [P] Configure ruff for linting in w2/db_query/backend/pyproject.toml
-- [ ] T005 [P] Create base CamelCaseModel with Pydantic alias_generator in w2/db_query/backend/src/models/__init__.py
-- [ ] T006 [P] Setup SQLite storage initialization in w2/db_query/backend/src/storage/sqlite_store.py
-- [ ] T007 [P] Create FastAPI app with CORS middleware in w2/db_query/backend/src/main.py
+- [X] T001 Create backend project structure at w2/db_query/backend/
+- [X] T002 Initialize Python project with uv in w2/db_query/backend/pyproject.toml
+- [X] T003 [P] Configure mypy for type checking in w2/db_query/backend/pyproject.toml
+- [X] T004 [P] Configure ruff for linting in w2/db_query/backend/pyproject.toml
+- [X] T005 [P] Create base CamelCaseModel with Pydantic alias_generator in w2/db_query/backend/src/models/__init__.py
+- [X] T006 [P] Setup SQLite storage initialization in w2/db_query/backend/src/storage/sqlite_store.py
+- [X] T007 [P] Create FastAPI app with CORS middleware in w2/db_query/backend/src/main.py
 
 ### Frontend Setup
 
-- [ ] T008 Create frontend project structure at w2/db_query/frontend/
-- [ ] T009 Initialize React + TypeScript project with Vite in w2/db_query/frontend/
-- [ ] T010 [P] Configure TailwindCSS in w2/db_query/frontend/tailwind.config.js
-- [ ] T011 [P] Configure TypeScript strict mode in w2/db_query/frontend/tsconfig.json
-- [ ] T012 [P] Setup Refine with Ant Design in w2/db_query/frontend/src/App.tsx
-- [ ] T013 [P] Create API client service in w2/db_query/frontend/src/services/api.ts
+- [X] T008 Create frontend project structure at w2/db_query/frontend/
+- [X] T009 Initialize React + TypeScript project with Vite in w2/db_query/frontend/
+- [X] T010 [P] Configure TailwindCSS in w2/db_query/frontend/tailwind.config.js
+- [X] T011 [P] Configure TypeScript strict mode in w2/db_query/frontend/tsconfig.json
+- [X] T012 [P] Setup Refine with Ant Design in w2/db_query/frontend/src/App.tsx
+- [X] T013 [P] Create API client service in w2/db_query/frontend/src/services/api.ts
 
 ### Shared Models & Types
 
-- [ ] T014 [P] Create error model in w2/db_query/backend/src/models/error.py
-- [ ] T015 [P] Create TypeScript type definitions in w2/db_query/frontend/src/types/models.ts
+- [X] T014 [P] Create error model in w2/db_query/backend/src/models/error.py
+- [X] T015 [P] Create TypeScript type definitions in w2/db_query/frontend/src/types/models.ts
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
 
