@@ -1,0 +1,32 @@
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+
+# Node/TypeScript build outputs
+dist/
+build/
+coverage/
+*.log
+
+# Python artifacts
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Environment files
+.env*
+
+# Universal editor/system junk
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/

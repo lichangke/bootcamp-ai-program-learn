@@ -61,46 +61,46 @@
 
 #### Backend - Connection Management
 
-- [ ] T016 [P] [US1] Create DatabaseConnection model in w2/db_query/backend/src/models/connection.py
-- [ ] T017 [P] [US1] Create SchemaMetadata, TableMetadata, ColumnMetadata models in w2/db_query/backend/src/models/metadata.py
-- [ ] T018 [US1] Implement ConnectionService with PostgreSQL connection validation in w2/db_query/backend/src/services/connection_service.py
-- [ ] T019 [US1] Implement MetadataService with PostgreSQL schema extraction in w2/db_query/backend/src/services/metadata_service.py
-- [ ] T020 [US1] Implement SQLite persistence for connections and metadata in w2/db_query/backend/src/storage/sqlite_store.py
-- [ ] T021 [US1] Create GET /api/v1/dbs endpoint in w2/db_query/backend/src/api/v1/dbs.py
-- [ ] T022 [US1] Create PUT /api/v1/dbs/{name} endpoint in w2/db_query/backend/src/api/v1/dbs.py
-- [ ] T023 [US1] Create GET /api/v1/dbs/{name} endpoint in w2/db_query/backend/src/api/v1/dbs.py
-- [ ] T024 [US1] Create POST /api/v1/dbs/{name}/refresh endpoint in w2/db_query/backend/src/api/v1/dbs.py
-- [ ] T025 [US1] Add error handling for connection failures in w2/db_query/backend/src/api/v1/dbs.py
+- [X] T016 [P] [US1] Create DatabaseConnection model in w2/db_query/backend/src/models/connection.py
+- [X] T017 [P] [US1] Create SchemaMetadata, TableMetadata, ColumnMetadata models in w2/db_query/backend/src/models/metadata.py
+- [X] T018 [US1] Implement ConnectionService with PostgreSQL connection validation in w2/db_query/backend/src/services/connection_service.py
+- [X] T019 [US1] Implement MetadataService with PostgreSQL schema extraction in w2/db_query/backend/src/services/metadata_service.py
+- [X] T020 [US1] Implement SQLite persistence for connections and metadata in w2/db_query/backend/src/storage/sqlite_store.py
+- [X] T021 [US1] Create GET /api/v1/dbs endpoint in w2/db_query/backend/src/api/v1/dbs.py
+- [X] T022 [US1] Create PUT /api/v1/dbs/{name} endpoint in w2/db_query/backend/src/api/v1/dbs.py
+- [X] T023 [US1] Create GET /api/v1/dbs/{name} endpoint in w2/db_query/backend/src/api/v1/dbs.py
+- [X] T024 [US1] Create POST /api/v1/dbs/{name}/refresh endpoint in w2/db_query/backend/src/api/v1/dbs.py
+- [X] T025 [US1] Add error handling for connection failures in w2/db_query/backend/src/api/v1/dbs.py
 
 #### Frontend - Connection Management UI
 
-- [ ] T026 [P] [US1] Create DatabaseList component in w2/db_query/frontend/src/components/DatabaseList.tsx
-- [ ] T027 [P] [US1] Create SchemaViewer component in w2/db_query/frontend/src/components/SchemaViewer.tsx
-- [ ] T028 [US1] Create database list page in w2/db_query/frontend/src/pages/databases/list.tsx
-- [ ] T029 [US1] Create database create page in w2/db_query/frontend/src/pages/databases/create.tsx
-- [ ] T030 [US1] Create database show page with schema viewer in w2/db_query/frontend/src/pages/databases/show.tsx
-- [ ] T031 [US1] Add error handling and empty states in w2/db_query/frontend/src/pages/databases/
+- [X] T026 [P] [US1] Create DatabaseList component in w2/db_query/frontend/src/components/DatabaseList.tsx
+- [X] T027 [P] [US1] Create SchemaViewer component in w2/db_query/frontend/src/components/SchemaViewer.tsx
+- [X] T028 [US1] Create database list page in w2/db_query/frontend/src/pages/databases/list.tsx
+- [X] T029 [US1] Create database create page in w2/db_query/frontend/src/pages/databases/create.tsx
+- [X] T030 [US1] Create database show page with schema viewer in w2/db_query/frontend/src/pages/databases/show.tsx
+- [X] T031 [US1] Add error handling and empty states in w2/db_query/frontend/src/pages/databases/
 
 ### User Story 2: SQL Query Execution
 
 #### Backend - Query Execution
 
-- [ ] T032 [P] [US2] Create QueryRequest and QueryResult models in w2/db_query/backend/src/models/query.py
-- [ ] T033 [US2] Implement SQL validation with sqlglot in w2/db_query/backend/src/services/query_service.py
-- [ ] T034 [US2] Implement SELECT-only enforcement in w2/db_query/backend/src/services/query_service.py
-- [ ] T035 [US2] Implement multi-statement detection and rejection in w2/db_query/backend/src/services/query_service.py
-- [ ] T036 [US2] Implement automatic LIMIT 1000 injection in w2/db_query/backend/src/services/query_service.py
-- [ ] T037 [US2] Implement query execution with PostgreSQL in w2/db_query/backend/src/services/query_service.py
-- [ ] T038 [US2] Create POST /api/v1/dbs/{name}/query endpoint in w2/db_query/backend/src/api/v1/query.py
-- [ ] T039 [US2] Add SQL error handling and user-friendly messages in w2/db_query/backend/src/api/v1/query.py
+- [X] T032 [P] [US2] Create QueryRequest and QueryResult models in w2/db_query/backend/src/models/query.py
+- [X] T033 [US2] Implement SQL validation with sqlglot in w2/db_query/backend/src/services/query_service.py
+- [X] T034 [US2] Implement SELECT-only enforcement in w2/db_query/backend/src/services/query_service.py
+- [X] T035 [US2] Implement multi-statement detection and rejection in w2/db_query/backend/src/services/query_service.py
+- [X] T036 [US2] Implement automatic LIMIT 1000 injection in w2/db_query/backend/src/services/query_service.py
+- [X] T037 [US2] Implement query execution with PostgreSQL in w2/db_query/backend/src/services/query_service.py
+- [X] T038 [US2] Create POST /api/v1/dbs/{name}/query endpoint in w2/db_query/backend/src/api/v1/query.py
+- [X] T039 [US2] Add SQL error handling and user-friendly messages in w2/db_query/backend/src/api/v1/query.py
 
 #### Frontend - Query Execution UI
 
-- [ ] T040 [P] [US2] Create SqlEditor component with Monaco Editor in w2/db_query/frontend/src/components/SqlEditor.tsx
-- [ ] T041 [P] [US2] Create QueryResults component with table display in w2/db_query/frontend/src/components/QueryResults.tsx
-- [ ] T042 [US2] Create query page with editor and results in w2/db_query/frontend/src/pages/query/index.tsx
-- [ ] T043 [US2] Add SQL syntax highlighting and autocomplete in w2/db_query/frontend/src/components/SqlEditor.tsx
-- [ ] T044 [US2] Add error display and empty result states in w2/db_query/frontend/src/pages/query/index.tsx
+- [X] T040 [P] [US2] Create SqlEditor component with Monaco Editor in w2/db_query/frontend/src/components/SqlEditor.tsx
+- [X] T041 [P] [US2] Create QueryResults component with table display in w2/db_query/frontend/src/components/QueryResults.tsx
+- [X] T042 [US2] Create query page with editor and results in w2/db_query/frontend/src/pages/query/index.tsx
+- [X] T043 [US2] Add SQL syntax highlighting and autocomplete in w2/db_query/frontend/src/components/SqlEditor.tsx
+- [X] T044 [US2] Add error display and empty result states in w2/db_query/frontend/src/pages/query/index.tsx
 
 **Checkpoint**: Core features complete - users can connect to databases and execute SQL queries
 
@@ -114,19 +114,19 @@
 
 ### Backend - Natural Language Processing
 
-- [ ] T045 [P] [US3] Create NaturalLanguageContext model in w2/db_query/backend/src/models/query.py
-- [ ] T046 [US3] Implement OpenAI SDK integration in w2/db_query/backend/src/services/llm_service.py
-- [ ] T047 [US3] Implement schema context preparation for LLM in w2/db_query/backend/src/services/llm_service.py
-- [ ] T048 [US3] Implement SQL generation from natural language in w2/db_query/backend/src/services/llm_service.py
-- [ ] T049 [US3] Create POST /api/v1/dbs/{name}/query/natural endpoint in w2/db_query/backend/src/api/v1/query.py
-- [ ] T050 [US3] Add validation for generated SQL (same rules as manual SQL) in w2/db_query/backend/src/api/v1/query.py
+- [X] T045 [P] [US3] Create NaturalLanguageContext model in w2/db_query/backend/src/models/query.py
+- [X] T046 [US3] Implement OpenAI SDK integration in w2/db_query/backend/src/services/llm_service.py
+- [X] T047 [US3] Implement schema context preparation for LLM in w2/db_query/backend/src/services/llm_service.py
+- [X] T048 [US3] Implement SQL generation from natural language in w2/db_query/backend/src/services/llm_service.py
+- [X] T049 [US3] Create POST /api/v1/dbs/{name}/query/natural endpoint in w2/db_query/backend/src/api/v1/query.py
+- [X] T050 [US3] Add validation for generated SQL (same rules as manual SQL) in w2/db_query/backend/src/api/v1/query.py
 
 ### Frontend - Natural Language UI
 
-- [ ] T051 [P] [US3] Create NaturalLanguageInput component in w2/db_query/frontend/src/components/NaturalLanguageInput.tsx
-- [ ] T052 [US3] Add natural language tab to query page in w2/db_query/frontend/src/pages/query/index.tsx
-- [ ] T053 [US3] Add generated SQL preview and confirmation in w2/db_query/frontend/src/pages/query/index.tsx
-- [ ] T054 [US3] Add loading states for LLM generation in w2/db_query/frontend/src/pages/query/index.tsx
+- [X] T051 [P] [US3] Create NaturalLanguageInput component in w2/db_query/frontend/src/components/NaturalLanguageInput.tsx
+- [X] T052 [US3] Add natural language tab to query page in w2/db_query/frontend/src/pages/query/index.tsx
+- [X] T053 [US3] Add generated SQL preview and confirmation in w2/db_query/frontend/src/pages/query/index.tsx
+- [X] T054 [US3] Add loading states for LLM generation in w2/db_query/frontend/src/pages/query/index.tsx
 
 **Checkpoint**: All user stories complete - full feature set implemented
 

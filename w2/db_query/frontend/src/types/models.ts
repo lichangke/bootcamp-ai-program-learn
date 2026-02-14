@@ -46,6 +46,10 @@ export interface DatabaseDetailResponse {
   metadata: SchemaMetadata;
 }
 
+export interface UpsertDatabaseRequest {
+  url: string;
+}
+
 export interface ColumnDefinition {
   name: string;
   type: string;
@@ -60,8 +64,16 @@ export interface QueryResult {
 }
 
 export interface QueryExecutionRequest {
-  connectionName: string;
-  queryType: "sql" | "natural";
-  content: string;
+  sql: string;
 }
 
+export interface LlmHealthStatus {
+  provider: string;
+  model: string;
+  baseUrl: string;
+  status: string;
+  reachable: boolean;
+  latencyMs?: number;
+  response?: string;
+  details?: string;
+}

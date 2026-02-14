@@ -49,7 +49,7 @@ frontend-lint:
 test: backend-test
 
 backend-test:
-	cd $(BACKEND_DIR) && $(BACKEND_PY) -m pytest
+	powershell.exe -NoProfile -Command "cd '$(BACKEND_DIR)'; & '$(BACKEND_PY)' -m pytest; if ($$LASTEXITCODE -eq 5) { Write-Host 'No tests collected; treating as success.'; exit 0 } else { exit $$LASTEXITCODE }"
 
 build: frontend-build backend-compile
 

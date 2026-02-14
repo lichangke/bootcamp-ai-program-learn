@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/services/api.ts","./src/types/models.ts"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/databaselist.tsx","./src/components/naturallanguageinput.tsx","./src/components/queryresults.tsx","./src/components/schemaviewer.tsx","./src/components/sqleditor.tsx","./src/pages/databases/create.tsx","./src/pages/databases/list.tsx","./src/pages/databases/show.tsx","./src/pages/query/index.tsx","./src/services/api.ts","./src/types/models.ts"],"version":"5.9.3"}
