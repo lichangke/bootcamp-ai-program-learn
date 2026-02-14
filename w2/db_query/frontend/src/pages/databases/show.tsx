@@ -1,5 +1,5 @@
 import { Alert, Button, Empty, Space, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { SchemaViewer } from "../../components/SchemaViewer";
@@ -15,7 +15,7 @@ export function DatabasesShowPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadDetail = async () => {
+  const loadDetail = useCallback(async () => {
     if (!dbName) {
       return;
     }
@@ -30,7 +30,7 @@ export function DatabasesShowPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dbName]);
 
   const refreshMetadata = async () => {
     if (!dbName) {
@@ -50,7 +50,7 @@ export function DatabasesShowPage() {
 
   useEffect(() => {
     void loadDetail();
-  }, [dbName]);
+  }, [loadDetail]);
 
   if (!dbName) {
     return <Empty description="Database name is missing in URL" />;
@@ -87,4 +87,3 @@ export function DatabasesShowPage() {
     </Space>
   );
 }
-

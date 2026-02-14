@@ -136,12 +136,12 @@
 
 **Purpose**: Final touches and documentation
 
-- [ ] T055 [P] Add README.md for backend in w2/db_query/backend/README.md
-- [ ] T056 [P] Add README.md for frontend in w2/db_query/frontend/README.md
-- [ ] T057 [P] Add project overview README in w2/db_query/README.md
-- [ ] T058 [P] Run type checking (mypy for backend, tsc for frontend)
-- [ ] T059 [P] Run linting (ruff for backend, eslint for frontend)
-- [ ] T060 Verify all constitution principles are satisfied
+- [X] T055 [P] Add README.md for backend in w2/db_query/backend/README.md
+- [X] T056 [P] Add README.md for frontend in w2/db_query/frontend/README.md
+- [X] T057 [P] Add project overview README in w2/db_query/README.md
+- [X] T058 [P] Run type checking (mypy for backend, tsc for frontend)
+- [X] T059 [P] Run linting (ruff for backend, eslint for frontend)
+- [X] T060 Verify all constitution principles are satisfied
 
 ---
 

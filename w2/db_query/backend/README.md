@@ -2,9 +2,51 @@
 
 FastAPI backend for the DB Query Tool.
 
-## Run
+## Stack
+
+- Python 3.12+
+- FastAPI + Pydantic
+- PostgreSQL driver: `psycopg2`
+- SQL parser: `sqlglot`
+- Local persistence: SQLite (`~/.db_query/db_query.db`)
+
+## Run Locally
 
 ```bash
-uv run uvicorn src.main:app --reload
+cd w2/db_query/backend
+uv sync --no-install-project
+.\.venv\Scripts\python.exe -m uvicorn src.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
+## Quality Checks
+
+```bash
+cd w2/db_query/backend
+.\.venv\Scripts\python.exe -m mypy src
+.\.venv\Scripts\python.exe -m ruff check src tests
+.\.venv\Scripts\python.exe -m pytest
+```
+
+## API Endpoints
+
+- `GET /health`
+- `GET /health/llm`
+- `GET /api/v1/dbs`
+- `PUT /api/v1/dbs/{name}`
+- `GET /api/v1/dbs/{name}`
+- `POST /api/v1/dbs/{name}/refresh`
+- `DELETE /api/v1/dbs/{name}`
+- `POST /api/v1/dbs/{name}/query`
+- `POST /api/v1/dbs/{name}/query/natural`
+
+## Environment Variables
+
+- `DEEPSEEK_API_KEY` (recommended for natural language SQL generation)
+- `DEEPSEEK_BASE_URL` (optional, default: `https://api.deepseek.com`)
+- `OPENAI_API_KEY` (backward-compatible fallback key name)
+
+## Notes
+
+- SQL execution is strictly read-only (`SELECT` only, single statement, auto `LIMIT 1000`).
+- Backend JSON responses use camelCase fields.
+- Authentication/authorization is intentionally out of scope for this project.

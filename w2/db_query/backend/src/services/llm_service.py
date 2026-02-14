@@ -24,7 +24,8 @@ class LlmService:
     ) -> None:
         self._api_key = api_key
         self._model = model
-        self._base_url = base_url or os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+        resolved_base_url = base_url or os.getenv("DEEPSEEK_BASE_URL") or "https://api.deepseek.com"
+        self._base_url: str = resolved_base_url
 
     def _resolve_api_key(self) -> str | None:
         return self._api_key or os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY")
