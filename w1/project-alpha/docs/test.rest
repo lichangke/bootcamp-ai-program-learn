@@ -1,0 +1,176 @@
+@baseUrl = http://127.0.0.1:8000
+@apiBase = {{baseUrl}}/api
+
+### Root endpoint (optional)
+GET {{baseUrl}}/
+Accept: application/json
+
+### Health check
+GET {{apiBase}}/health
+Accept: application/json
+
+### List tags (initial)
+GET {{apiBase}}/tags
+Accept: application/json
+
+### Create tag: backend
+# expect: 201
+# @name createTagBackend
+POST {{apiBase}}/tags
+Content-Type: application/json
+Accept: application/json
+
+{
+  "name": "backend"
+}
+
+@tagBackendId = {{createTagBackend.response.body.$.data.id}}
+
+### Create tag: frontend
+# expect: 201
+# @name createTagFrontend
+POST {{apiBase}}/tags
+Content-Type: application/json
+Accept: application/json
+
+{
+  "name": "frontend"
+}
+
+@tagFrontendId = {{createTagFrontend.response.body.$.data.id}}
+
+### Update tag: frontend -> ui
+# expect: 200
+PUT {{apiBase}}/tags/{{tagFrontendId}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "name": "ui"
+}
+
+### List tags (after create/update)
+GET {{apiBase}}/tags
+Accept: application/json
+
+### Create ticket alpha (open, 2 tags)
+# expect: 201
+# @name createTicketAlpha
+POST {{apiBase}}/tickets
+Content-Type: application/json
+Accept: application/json
+
+{
+  "title": "Build Project Alpha",
+  "description": "Day 5 main flow",
+  "tag_ids": [{{tagBackendId}}, {{tagFrontendId}}]
+}
+
+@ticketAlphaId = {{createTicketAlpha.response.body.$.data.id}}
+
+### Get ticket by id
+# expect: 200
+GET {{apiBase}}/tickets/{{ticketAlphaId}}
+Accept: application/json
+
+### Update ticket (full tag_ids replacement)
+# expect: 200
+PUT {{apiBase}}/tickets/{{ticketAlphaId}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "title": "Build Project Alpha v2",
+  "description": "Day 6 interaction polish",
+  "tag_ids": [{{tagBackendId}}]
+}
+
+### Complete ticket (open -> done)
+# expect: 200, status=done
+PATCH {{apiBase}}/tickets/{{ticketAlphaId}}/complete
+Accept: application/json
+
+### Reopen ticket (done -> open)
+# expect: 200, status=open
+PATCH {{apiBase}}/tickets/{{ticketAlphaId}}/reopen
+Accept: application/json
+
+### Create ticket beta (for done filter)
+# expect: 201
+# @name createTicketBeta
+POST {{apiBase}}/tickets
+Content-Type: application/json
+Accept: application/json
+
+{
+  "title": "Refactor API error handling",
+  "description": "Day 7 regression",
+  "tag_ids": [{{tagBackendId}}]
+}
+
+@ticketBetaId = {{createTicketBeta.response.body.$.data.id}}
+
+### Complete ticket beta
+PATCH {{apiBase}}/tickets/{{ticketBetaId}}/complete
+Accept: application/json
+
+### List tickets (default pagination)
+GET {{apiBase}}/tickets
+Accept: application/json
+
+### List tickets by title search (q)
+GET {{apiBase}}/tickets?q=Project
+Accept: application/json
+
+### List tickets by tag filter
+GET {{apiBase}}/tickets?tag_id={{tagBackendId}}
+Accept: application/json
+
+### List tickets by status=open
+GET {{apiBase}}/tickets?status=open
+Accept: application/json
+
+### List tickets by status=done
+GET {{apiBase}}/tickets?status=done
+Accept: application/json
+
+### Combined filters: status + q + pagination
+GET {{apiBase}}/tickets?status=open&q=Build&page=1&page_size=10
+Accept: application/json
+
+### Pagination upper bound: page_size=100 (valid)
+GET {{apiBase}}/tickets?page=1&page_size=100
+Accept: application/json
+
+### Pagination invalid: page_size=101
+# expect: 422
+GET {{apiBase}}/tickets?page=1&page_size=101
+Accept: application/json
+
+### Delete ticket alpha
+# expect: 204
+DELETE {{apiBase}}/tickets/{{ticketAlphaId}}
+Accept: application/json
+
+### Delete ticket beta
+# expect: 204
+DELETE {{apiBase}}/tickets/{{ticketBetaId}}
+Accept: application/json
+
+### Get deleted ticket (should be 404)
+GET {{apiBase}}/tickets/{{ticketAlphaId}}
+Accept: application/json
+
+### Delete tag backend
+# expect: 204
+DELETE {{apiBase}}/tags/{{tagBackendId}}
+Accept: application/json
+
+### Delete tag ui
+# expect: 204
+DELETE {{apiBase}}/tags/{{tagFrontendId}}
+Accept: application/json
+
+### List tags after deletion
+GET {{apiBase}}/tags
+Accept: application/json
