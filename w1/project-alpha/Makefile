@@ -1,6 +1,6 @@
 .PHONY: backend-install backend-lint backend-format backend-test backend-test-performance
-.PHONY: backend-db-upgrade backend-db-downgrade backend-db-seed
-.PHONY: frontend-install frontend-lint frontend-format frontend-build frontend-test frontend-e2e
+.PHONY: backend-db-upgrade backend-db-downgrade backend-db-seed backend-dev
+.PHONY: frontend-install frontend-lint frontend-format frontend-build frontend-test frontend-e2e frontend-dev
 .PHONY: lint format test
 
 backend-install:
@@ -27,6 +27,9 @@ backend-db-downgrade:
 backend-db-seed:
 	python backend/scripts/seed_db.py
 
+backend-dev:
+	cd backend && uvicorn app.main:app --reload --port 8000
+
 frontend-install:
 	cd frontend && npm install
 
@@ -44,6 +47,9 @@ frontend-test:
 
 frontend-e2e:
 	cd frontend && npm run e2e
+
+frontend-dev:
+	cd frontend && npm run dev
 
 lint: backend-lint frontend-lint
 
