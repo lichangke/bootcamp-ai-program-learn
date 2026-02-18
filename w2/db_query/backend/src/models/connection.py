@@ -7,7 +7,7 @@ from src.models import CamelCaseModel
 
 
 class DatabaseConnection(CamelCaseModel):
-    name: str = Field(min_length=1, max_length=50, pattern=r"^[a-zA-Z0-9-]+$")
+    name: str = Field(min_length=1, max_length=50, pattern=r"^[a-zA-Z0-9_-]+$")
     url: str = Field(min_length=1)
     created_at: datetime
     updated_at: datetime

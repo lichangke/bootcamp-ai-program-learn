@@ -2,6 +2,8 @@
 @apiBase = {{baseUrl}}/api/v1
 @dbName = demo
 @pgUrl = postgres://postgres:postgres@localhost:5432/postgres
+@mysqlDbName = interview_db
+@mysqlUrl = mysql://root:leacock@localhost:3306/interview_db
 
 ###
 # Health check (implemented)
@@ -26,6 +28,56 @@ Accept: application/json
 ###
 # Get one connection with metadata
 GET {{apiBase}}/dbs/{{dbName}}
+Accept: application/json
+
+###
+# =========================
+# MySQL support test cases
+# =========================
+
+###
+# Create or update MySQL connection
+PUT {{apiBase}}/dbs/{{mysqlDbName}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "url": "{{mysqlUrl}}"
+}
+
+###
+# Get MySQL connection with metadata
+GET {{apiBase}}/dbs/{{mysqlDbName}}
+Accept: application/json
+
+###
+# Refresh MySQL metadata
+POST {{apiBase}}/dbs/{{mysqlDbName}}/refresh
+Accept: application/json
+
+###
+# Execute MySQL SQL query
+POST {{apiBase}}/dbs/{{mysqlDbName}}/query
+Content-Type: application/json
+Accept: application/json
+
+{
+  "sql": "SELECT table_name FROM information_schema.tables WHERE table_schema = 'interview_db' LIMIT 10"
+}
+
+###
+# Natural language to MySQL SQL
+POST {{apiBase}}/dbs/{{mysqlDbName}}/query/natural
+Content-Type: application/json
+Accept: application/json
+
+{
+  "prompt": "list first 10 table names from interview_db"
+}
+
+###
+# Delete MySQL connection
+DELETE {{apiBase}}/dbs/{{mysqlDbName}}
 Accept: application/json
 
 ###

@@ -66,7 +66,7 @@ def get_dbs() -> list[DatabaseConnection]:
 @router.put("/{name}", response_model=DatabaseConnection)
 def put_db(
     request: ConnectionUpsertRequest,
-    name: str = Path(pattern=r"^[a-zA-Z0-9-]+$"),
+    name: str = Path(pattern=r"^[a-zA-Z0-9_-]+$"),
 ) -> DatabaseConnection:
     request_model = request
     try:
@@ -99,7 +99,7 @@ def put_db(
 
 
 @router.get("/{name}", response_model=DatabaseDetailResponse)
-def get_db(name: str = Path(pattern=r"^[a-zA-Z0-9-]+$")) -> DatabaseDetailResponse:
+def get_db(name: str = Path(pattern=r"^[a-zA-Z0-9_-]+$")) -> DatabaseDetailResponse:
     connection = get_connection_by_name(name)
     if connection is None:
         _error(404, error_code="DB_NOT_FOUND", message=f"Database connection '{name}' not found")
@@ -114,7 +114,7 @@ def get_db(name: str = Path(pattern=r"^[a-zA-Z0-9-]+$")) -> DatabaseDetailRespon
 
 
 @router.post("/{name}/refresh", response_model=SchemaMetadata)
-def refresh_db(name: str = Path(pattern=r"^[a-zA-Z0-9-]+$")) -> SchemaMetadata:
+def refresh_db(name: str = Path(pattern=r"^[a-zA-Z0-9_-]+$")) -> SchemaMetadata:
     connection = get_connection_by_name(name)
     if connection is None:
         _error(404, error_code="DB_NOT_FOUND", message=f"Database connection '{name}' not found")
@@ -137,7 +137,7 @@ def refresh_db(name: str = Path(pattern=r"^[a-zA-Z0-9-]+$")) -> SchemaMetadata:
 
 
 @router.delete("/{name}", status_code=204)
-def delete_db(name: str = Path(pattern=r"^[a-zA-Z0-9-]+$")) -> None:
+def delete_db(name: str = Path(pattern=r"^[a-zA-Z0-9_-]+$")) -> None:
     deleted = delete_connection(name)
     if not deleted:
         _error(404, error_code="DB_NOT_FOUND", message=f"Database connection '{name}' not found")

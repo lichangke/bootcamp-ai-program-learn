@@ -620,7 +620,10 @@ function App() {
             label="Connection Name"
             rules={[
               { required: true, message: "Connection name is required" },
-              { pattern: /^[a-zA-Z0-9-]+$/, message: "Only letters, numbers and dashes are allowed" },
+              {
+                pattern: /^[a-zA-Z0-9_-]+$/,
+                message: "Only letters, numbers, dashes, and underscores are allowed",
+              },
             ]}
           >
             <Input placeholder="employees" />

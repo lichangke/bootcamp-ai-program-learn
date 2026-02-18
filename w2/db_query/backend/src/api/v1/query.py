@@ -50,7 +50,7 @@ def _error(
 @router.post("/{name}/query", response_model=QueryResult)
 def run_query(
     payload: SqlQueryPayload,
-    name: str = Path(pattern=r"^[a-zA-Z0-9-]+$"),
+    name: str = Path(pattern=r"^[a-zA-Z0-9_-]+$"),
 ) -> QueryResult:
     connection = get_connection_by_name(name)
     if connection is None:
@@ -94,7 +94,7 @@ def run_query(
 @router.post("/{name}/query/natural", response_model=NaturalQueryResponse)
 def generate_sql_from_natural(
     payload: NaturalQueryPayload,
-    name: str = Path(pattern=r"^[a-zA-Z0-9-]+$"),
+    name: str = Path(pattern=r"^[a-zA-Z0-9_-]+$"),
 ) -> NaturalQueryResponse:
     connection = get_connection_by_name(name)
     if connection is None:
