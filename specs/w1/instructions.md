@@ -22,5 +22,5 @@
 
 添加一个seed.sql里面放50个meaningful 的 ticket 和几十个tags(包含platform tag,如 ios,projecttag如 viking,功能性 tag如autocomplete,等等)。要求 seed文件正确可以通过psql执行。
 
-## 
+## 优化 UI
 按照 apple website 的设计风格,think ultra hard,优化 UI和UX。

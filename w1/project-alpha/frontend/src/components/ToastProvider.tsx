@@ -18,12 +18,12 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 function getToneClasses(tone: ToastTone): string {
   if (tone === "success") {
-    return "border-emerald-400/40 bg-emerald-500/20 text-emerald-100";
+    return "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-400/40 dark:bg-emerald-500/20 dark:text-emerald-100";
   }
   if (tone === "error") {
-    return "border-rose-500/40 bg-rose-500/20 text-rose-100";
+    return "border-rose-300 bg-rose-100 text-rose-800 dark:border-rose-500/40 dark:bg-rose-500/20 dark:text-rose-100";
   }
-  return "border-cyan-400/40 bg-cyan-500/20 text-cyan-100";
+  return "border-cyan-300 bg-cyan-100 text-cyan-800 dark:border-cyan-400/40 dark:bg-cyan-500/20 dark:text-cyan-100";
 }
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
