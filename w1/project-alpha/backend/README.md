@@ -7,6 +7,8 @@ pip install -e ".[dev]"
 uvicorn app.main:app --reload --port 8000
 ```
 
+The backend settings load `.env` from project root (`../.env`) first.
+
 ## Migrations
 
 ```bash
@@ -62,3 +64,23 @@ ruff check .
 ruff format .
 pytest
 ```
+
+Run performance test:
+
+```bash
+pytest -q tests/test_ticket_list_performance.py
+```
+
+## Seed Data
+
+From `./w1/project-alpha`:
+
+```bash
+make backend-db-seed
+```
+
+This loads `seed.sql` into `DATABASE_URL` and inserts:
+
+- 50 tags
+- 50 tickets
+- 150 ticket-tag links

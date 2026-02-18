@@ -26,3 +26,14 @@
 - Day 7 status: Completed.
 - Day 7 delivered scope: backend API integration tests, backend list performance test (10k sample data, p95 target), frontend component tests, Playwright E2E smoke coverage.
 - Day 7 verification result summary: backend test/lint and frontend lint/build/unit/E2E all passed in local validation runs.
+- Added repeatable seed dataset in `seed.sql` (50 tickets, 50 tags, 150 links).
+- Added `backend-db-seed`, `backend-dev`, and `frontend-dev` make targets.
+- Added light/dark theme toggle with persisted preference in frontend UI.
+- Day 8 status: Completed.
+- Day 8 delivered scope: acceptance review, docs freeze, open-items registration.
+- Added final acceptance and handoff docs:
+  - `docs/final-acceptance.md`
+  - `docs/open-items.md`
+- Final Day 8 verification run on 2026-02-18:
+  - backend: `python -m ruff check .` + `python -m pytest -q` -> pass
+  - frontend: `npm run lint` + `npm run build` + `npm run test:run` + `npm run e2e` -> pass
