@@ -43,10 +43,10 @@ export function DatabasesCreatePage() {
         </Form.Item>
         <Form.Item
           name="url"
-          label="PostgreSQL URL"
+          label="Database URL (PostgreSQL or MySQL)"
           rules={[{ required: true, message: "Database URL is required" }]}
         >
-          <Input placeholder="postgres://user:pass@host:5432/db" />
+          <Input placeholder="postgres://user:pass@host:5432/db or mysql://user:pass@host:3306/db" />
         </Form.Item>
         <Form.Item>
           <Button type="primary" htmlType="submit" loading={submitting}>
@@ -57,4 +57,3 @@ export function DatabasesCreatePage() {
     </Space>
   );
 }
-

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Database Query Tool API
-  description: API for managing database connections, browsing schemas, and executing read-only SQL queries
+  description: API for managing database connections, browsing schemas, and executing read-only SQL queries (PostgreSQL/MySQL)
   version: 1.0.0
   contact:
     name: DB Query Tool
@@ -67,8 +67,8 @@ paths:
                 url:
                   type: string
                   format: uri
-                  description: PostgreSQL connection URL
-                  example: "postgres://postgres:postgres@localhost:5432/postgres"
+                  description: PostgreSQL or MySQL connection URL
+                  example: "mysql://root:password@localhost:3306/todo_db"
       responses:
         '200':
           description: Connection updated successfully
@@ -204,7 +204,7 @@ paths:
         - Only SELECT statements allowed
         - Multi-statement queries rejected
         - Automatic LIMIT 1000 added if not present
-        - SQL validated with sqlglot parser
+        - SQL validated with sqlglot parser using connection dialect
       operationId: executeQuery
       requestBody:
         required: true
@@ -260,7 +260,7 @@ paths:
       summary: Generate SQL from natural language
       description: |
         Uses OpenAI LLM to generate SQL from natural language description.
-        - Includes database schema as context
+        - Includes database schema as context and target SQL dialect
         - Returns generated SQL for user review
         - Does NOT execute the query automatically
         - Generated SQL still subject to validation rules
@@ -334,8 +334,8 @@ components:
         url:
           type: string
           format: uri
-          description: PostgreSQL connection URL (password may be masked in responses)
-          example: "postgres://user:****@localhost:5432/mydb"
+          description: PostgreSQL/MySQL connection URL (password may be masked in responses)
+          example: "mysql://user:****@localhost:3306/todo_db"
         createdAt:
           type: string
           format: date-time
@@ -423,8 +423,8 @@ components:
           example: "user_id"
         dataType:
           type: string
-          description: PostgreSQL data type
-          example: "integer"
+          description: Database column type
+          example: "varchar"
         isNullable:
           type: boolean
           description: Whether column accepts NULL

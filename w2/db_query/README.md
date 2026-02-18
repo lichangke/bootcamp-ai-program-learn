@@ -1,10 +1,10 @@
 # DB Query Tool (W2)
 
-Database query tool for PostgreSQL with:
+Database query tool for PostgreSQL/MySQL with:
 
 - Connection management and schema browsing
 - Read-only SQL execution (`SELECT` only)
-- Natural language to SQL generation (DeepSeek-compatible)
+- Natural language to SQL generation (DeepSeek-compatible, dialect-aware)
 - Local persistence for connection metadata
 
 ## Monorepo Structure

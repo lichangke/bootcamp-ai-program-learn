@@ -6,7 +6,7 @@ FastAPI backend for the DB Query Tool.
 
 - Python 3.12+
 - FastAPI + Pydantic
-- PostgreSQL driver: `psycopg2`
+- Database drivers: `psycopg2` (PostgreSQL), `pymysql` (MySQL)
 - SQL parser: `sqlglot`
 - Local persistence: SQLite (`~/.db_query/db_query.db`)
 
@@ -50,3 +50,14 @@ cd w2/db_query/backend
 - SQL execution is strictly read-only (`SELECT` only, single statement, auto `LIMIT 1000`).
 - Backend JSON responses use camelCase fields.
 - Authentication/authorization is intentionally out of scope for this project.
+
+## Connection URL Examples
+
+- PostgreSQL: `postgres://user:pass@host:5432/db_name`
+- MySQL: `mysql://user:pass@host:3306/db_name`
+
+For local verification with an existing MySQL login-path:
+
+```bash
+mysql --login-path=todo_local -u root todo_db -e "SELECT * FROM todos;"
+```

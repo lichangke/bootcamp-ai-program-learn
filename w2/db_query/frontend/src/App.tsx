@@ -554,7 +554,7 @@ function App() {
                             rows={6}
                             value={naturalPrompt}
                             onChange={(event) => setNaturalPrompt(event.target.value)}
-                            placeholder="Describe the SQL you want to generate..."
+                            placeholder="Describe the SQL you want to generate (PostgreSQL/MySQL)..."
                           />
                           <Button onClick={generateSql} loading={generatingSql} disabled={!selectedConnection}>
                             GENERATE SQL
@@ -627,10 +627,10 @@ function App() {
           </Form.Item>
           <Form.Item
             name="url"
-            label="PostgreSQL URL"
+            label="Database URL (PostgreSQL or MySQL)"
             rules={[{ required: true, message: "Database URL is required" }]}
           >
-            <Input placeholder="postgres://user:pass@host:5432/db" />
+            <Input placeholder="postgres://user:pass@host:5432/db or mysql://user:pass@host:3306/db" />
           </Form.Item>
         </Form>
       </Modal>

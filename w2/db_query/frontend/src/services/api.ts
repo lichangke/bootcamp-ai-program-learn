@@ -25,11 +25,21 @@ async function requestWithPath<T>(path: string, init?: RequestInit): Promise<T> 
     let details = "";
     if (contentType.includes("application/json")) {
       try {
-        const payload = (await response.json()) as { detail?: unknown; message?: unknown };
+        const payload = (await response.json()) as {
+          detail?: unknown;
+          message?: unknown;
+        };
         if (typeof payload.message === "string") {
           details = payload.message;
         } else if (typeof payload.detail === "string") {
           details = payload.detail;
+        } else if (payload.detail && typeof payload.detail === "object") {
+          const detailObj = payload.detail as { message?: unknown; details?: unknown };
+          if (typeof detailObj.message === "string") {
+            details = detailObj.message;
+          } else if (typeof detailObj.details === "string") {
+            details = detailObj.details;
+          }
         }
       } catch {
         details = "";

@@ -26,7 +26,10 @@ ErrorType = Literal["connection", "syntax", "validation", "execution", "timeout"
 
 
 class ConnectionUpsertRequest(BaseModel):
-    url: str = Field(min_length=1)
+    url: str = Field(
+        min_length=1,
+        description="Database connection URL (PostgreSQL or MySQL)",
+    )
 
 
 class DatabaseDetailResponse(BaseModel):
@@ -81,7 +84,8 @@ def put_db(
 
     try:
         with connection_service.connect(model.url) as conn:
-            metadata = metadata_service.fetch_metadata(name, conn)
+            dialect = connection_service.detect_dialect(model.url)
+            metadata = metadata_service.fetch_metadata(name, conn, dialect)
         save_metadata(name, metadata)
     except Exception as exc:
         _error(
@@ -118,7 +122,8 @@ def refresh_db(name: str = Path(pattern=r"^[a-zA-Z0-9-]+$")) -> SchemaMetadata:
 
     try:
         with connection_service.connect(connection.url) as conn:
-            metadata = metadata_service.fetch_metadata(name, conn)
+            dialect = connection_service.detect_dialect(connection.url)
+            metadata = metadata_service.fetch_metadata(name, conn, dialect)
         save_metadata(name, metadata)
     except Exception as exc:
         _error(

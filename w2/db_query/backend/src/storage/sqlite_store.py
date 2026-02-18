@@ -125,7 +125,11 @@ def delete_connection(name: str) -> bool:
 
 
 def save_metadata(connection_name: str, metadata: SchemaMetadata) -> None:
-    metadata_json = metadata.model_dump_json(by_alias=True)
+    metadata_for_storage = metadata
+    if metadata.connection_name != connection_name:
+        metadata_for_storage = metadata.model_copy(update={"connection_name": connection_name})
+
+    metadata_json = metadata_for_storage.model_dump_json(by_alias=True)
     with _get_connection() as connection:
         connection.execute(
             """
@@ -135,7 +139,7 @@ def save_metadata(connection_name: str, metadata: SchemaMetadata) -> None:
                 metadata_json = excluded.metadata_json,
                 fetched_at = excluded.fetched_at
             """,
-            (connection_name, metadata_json, metadata.fetched_at.isoformat()),
+            (connection_name, metadata_json, metadata_for_storage.fetched_at.isoformat()),
         )
         connection.commit()
 

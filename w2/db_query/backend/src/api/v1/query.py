@@ -64,8 +64,10 @@ def run_query(
 
     connection_model = connection
 
+    dialect = connection_service.detect_dialect(connection_model.url)
+
     try:
-        validated_sql = query_service.validate_sql(payload.sql)
+        validated_sql = query_service.validate_sql(payload.sql, dialect)
     except QueryValidationError as exc:
         _error(
             400,
@@ -114,6 +116,8 @@ def generate_sql_from_natural(
 
     metadata_model = metadata
 
+    dialect = connection_service.detect_dialect(connection.url)
+
     try:
         limited_tables, schema_context, prompt_schema = llm_service.prepare_schema_context(
             metadata_model,
@@ -133,6 +137,7 @@ def generate_sql_from_natural(
             prompt=payload.prompt,
             connection_name=name,
             schema_prompt_context=prompt_schema,
+            dialect=dialect,
         )
     except LlmServiceError as exc:
         _error(
@@ -144,7 +149,7 @@ def generate_sql_from_natural(
         )
 
     try:
-        validated_sql = query_service.validate_sql(generated_sql)
+        validated_sql = query_service.validate_sql(generated_sql, dialect)
     except QueryValidationError as exc:
         _error(
             400,

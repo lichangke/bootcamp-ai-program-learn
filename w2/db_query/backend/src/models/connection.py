@@ -15,8 +15,7 @@ class DatabaseConnection(CamelCaseModel):
 
     @field_validator("url")
     @classmethod
-    def validate_postgres_url(cls, value: str) -> str:
-        if not value.startswith(("postgres://", "postgresql://")):
-            raise ValueError("URL must be a PostgreSQL connection string")
+    def validate_database_url(cls, value: str) -> str:
+        if not value.startswith(("postgres://", "postgresql://", "mysql://")):
+            raise ValueError("URL must be a PostgreSQL or MySQL connection string")
         return value
-
