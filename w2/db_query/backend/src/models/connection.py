@@ -5,10 +5,13 @@ from pydantic import Field, field_validator
 
 from src.models import CamelCaseModel
 
+SupportedDialect = Literal["postgres", "mysql"]
+
 
 class DatabaseConnection(CamelCaseModel):
     name: str = Field(min_length=1, max_length=50, pattern=r"^[a-zA-Z0-9_-]+$")
     url: str = Field(min_length=1)
+    dialect: SupportedDialect = "postgres"
     created_at: datetime
     updated_at: datetime
     status: Literal["active", "error", "unknown"] = "unknown"

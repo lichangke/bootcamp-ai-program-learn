@@ -9,7 +9,6 @@ from typing import Any
 from openai import OpenAI
 
 from src.models.metadata import SchemaMetadata, TableMetadata
-from src.services.dialect_service import DatabaseDialect
 
 
 class LlmServiceError(RuntimeError):
@@ -135,19 +134,18 @@ class LlmService:
         prompt: str,
         connection_name: str,
         schema_prompt_context: dict[str, Any],
-        dialect: DatabaseDialect = DatabaseDialect.POSTGRES,
+        dialect_label: str = "PostgreSQL",
+        sqlglot_dialect: str = "postgres",
     ) -> str:
         if not prompt.strip():
             raise LlmServiceError("Natural language prompt cannot be empty")
 
-        fallback_sql = self._build_fallback_sql(prompt, schema_prompt_context, dialect)
+        fallback_sql = self._build_fallback_sql(prompt, schema_prompt_context, sqlglot_dialect)
         api_key = self._resolve_api_key()
         if not api_key:
             return fallback_sql
 
         client = OpenAI(api_key=api_key, base_url=self._base_url)
-
-        dialect_label = "MySQL" if dialect == DatabaseDialect.MYSQL else "PostgreSQL"
 
         system_prompt = (
             f"You are a {dialect_label} SQL assistant. "
@@ -195,11 +193,11 @@ class LlmService:
         self,
         prompt: str,
         schema_prompt_context: dict[str, Any],
-        dialect: DatabaseDialect,
+        sqlglot_dialect: str,
     ) -> str:
         table_names = list(schema_prompt_context.keys())
         if not table_names:
-            if dialect == DatabaseDialect.MYSQL:
+            if sqlglot_dialect == "mysql":
                 return (
                     "SELECT table_schema, table_name "
                     "FROM information_schema.tables "

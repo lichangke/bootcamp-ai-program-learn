@@ -5,8 +5,8 @@ from typing import Any, cast
 
 from sqlglot import exp, parse
 
+from src.domain.interfaces.db_adapter import DbAdapter
 from src.models.query import ColumnDefinition, QueryResult
-from src.services.dialect_service import DatabaseDialect, sqlglot_dialect_name
 
 
 class QueryValidationError(ValueError):
@@ -17,14 +17,13 @@ class QueryService:
     def validate_sql(
         self,
         sql: str,
-        dialect: DatabaseDialect = DatabaseDialect.POSTGRES,
+        sqlglot_dialect: str = "postgres",
     ) -> str:
         if not sql.strip():
             raise QueryValidationError("SQL query cannot be empty")
 
-        dialect_name = sqlglot_dialect_name(dialect)
         try:
-            expressions = parse(sql, read=dialect_name)
+            expressions = parse(sql, read=sqlglot_dialect)
         except Exception as exc:
             raise QueryValidationError(f"SQL syntax error: {exc}") from exc
 
@@ -35,39 +34,16 @@ class QueryService:
         if not isinstance(expression, exp.Select):
             raise QueryValidationError("Only SELECT statements are allowed")
 
-        return self.ensure_limit(expression, dialect)
+        return self.ensure_limit(expression, sqlglot_dialect)
 
-    def ensure_limit(self, expression: exp.Expression, dialect: DatabaseDialect) -> str:
-        dialect_name = sqlglot_dialect_name(dialect)
+    def ensure_limit(self, expression: exp.Expression, sqlglot_dialect: str) -> str:
         if expression.args.get("limit") is not None:
-            return expression.sql(dialect=dialect_name)
+            return expression.sql(dialect=sqlglot_dialect)
         select_expr = cast(exp.Select, expression.copy())
         limited = select_expr.limit(1000)
-        return limited.sql(dialect=dialect_name)
+        return limited.sql(dialect=sqlglot_dialect)
 
-    def _extract_column_name(self, column: Any) -> str:
-        try:
-            name = column.name
-        except AttributeError:
-            name = None
-        if name is not None:
-            return str(name)
-        if isinstance(column, tuple) and column:
-            return str(column[0])
-        return "unknown"
-
-    def _extract_column_type(self, column: Any) -> str:
-        try:
-            type_code = column.type_code
-        except AttributeError:
-            type_code = None
-        if type_code is not None:
-            return str(type_code)
-        if isinstance(column, tuple) and len(column) > 1:
-            return str(column[1])
-        return "unknown"
-
-    def execute_query(self, conn: Any, sql: str) -> QueryResult:
+    def execute_query(self, conn: Any, sql: str, adapter: DbAdapter) -> QueryResult:
         start = time.perf_counter()
         with conn.cursor() as cursor:
             cursor.execute(sql)
@@ -77,8 +53,8 @@ class QueryService:
 
         columns = [
             ColumnDefinition(
-                name=self._extract_column_name(column),
-                type=self._extract_column_type(column),
+                name=adapter.normalize_column_name(column),
+                type=adapter.normalize_column_type(column),
             )
             for column in description
         ]

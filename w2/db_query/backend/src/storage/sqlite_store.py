@@ -4,8 +4,9 @@ import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
-from src.models.connection import DatabaseConnection
+from src.models.connection import DatabaseConnection, SupportedDialect
 from src.models.metadata import SchemaMetadata
 
 DEFAULT_DB_DIR = Path.home() / ".db_query"
@@ -27,11 +28,13 @@ def init_storage() -> None:
             CREATE TABLE IF NOT EXISTS connections (
                 name TEXT PRIMARY KEY,
                 url TEXT NOT NULL,
+                dialect TEXT NOT NULL DEFAULT 'postgres',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
             """
         )
+        _migrate_connections_table(connection)
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS metadata (
@@ -44,6 +47,22 @@ def init_storage() -> None:
             """
         )
         connection.commit()
+
+
+def _migrate_connections_table(connection: sqlite3.Connection) -> None:
+    cursor = connection.cursor()
+    rows = cursor.execute("PRAGMA table_info(connections)").fetchall()
+    columns = {str(row[1]) for row in rows}
+    if "dialect" not in columns:
+        cursor.execute(
+            "ALTER TABLE connections "
+            "ADD COLUMN dialect TEXT NOT NULL DEFAULT 'postgres'"
+        )
+        cursor.execute("UPDATE connections SET dialect = 'mysql' WHERE url LIKE 'mysql://%'")
+        cursor.execute(
+            "UPDATE connections SET dialect = 'postgres' "
+            "WHERE dialect IS NULL OR dialect = ''"
+        )
 
 
 def _get_connection() -> sqlite3.Connection:
@@ -59,15 +78,17 @@ def upsert_connection(connection_model: DatabaseConnection) -> None:
     with _get_connection() as connection:
         connection.execute(
             """
-            INSERT INTO connections (name, url, created_at, updated_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO connections (name, url, dialect, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(name) DO UPDATE SET
                 url = excluded.url,
+                dialect = excluded.dialect,
                 updated_at = excluded.updated_at
             """,
             (
                 connection_model.name,
                 connection_model.url,
+                connection_model.dialect,
                 connection_model.created_at.isoformat(),
                 connection_model.updated_at.isoformat(),
             ),
@@ -79,7 +100,7 @@ def list_connections() -> list[DatabaseConnection]:
     with _get_connection() as connection:
         rows = connection.execute(
             """
-            SELECT name, url, created_at, updated_at
+            SELECT name, url, dialect, created_at, updated_at
             FROM connections
             ORDER BY name ASC
             """
@@ -88,6 +109,7 @@ def list_connections() -> list[DatabaseConnection]:
         DatabaseConnection(
             name=str(row["name"]),
             url=str(row["url"]),
+            dialect=_resolve_dialect_value(row["dialect"], str(row["url"])),
             created_at=datetime.fromisoformat(str(row["created_at"])),
             updated_at=datetime.fromisoformat(str(row["updated_at"])),
             status="unknown",
@@ -100,7 +122,7 @@ def get_connection_by_name(name: str) -> DatabaseConnection | None:
     with _get_connection() as connection:
         row = connection.execute(
             """
-            SELECT name, url, created_at, updated_at
+            SELECT name, url, dialect, created_at, updated_at
             FROM connections
             WHERE name = ?
             """,
@@ -111,10 +133,26 @@ def get_connection_by_name(name: str) -> DatabaseConnection | None:
     return DatabaseConnection(
         name=str(row["name"]),
         url=str(row["url"]),
+        dialect=_resolve_dialect_value(row["dialect"], str(row["url"])),
         created_at=datetime.fromisoformat(str(row["created_at"])),
         updated_at=datetime.fromisoformat(str(row["updated_at"])),
         status="unknown",
     )
+
+
+def _resolve_dialect_value(raw_dialect: object, url: str) -> SupportedDialect:
+    if isinstance(raw_dialect, str):
+        normalized = raw_dialect.lower()
+        if normalized in {"postgres", "mysql"}:
+            return cast(SupportedDialect, normalized)
+    return _infer_dialect_from_url(url)
+
+
+def _infer_dialect_from_url(url: str) -> SupportedDialect:
+    lower_url = url.lower()
+    if lower_url.startswith("mysql://"):
+        return "mysql"
+    return "postgres"
 
 
 def delete_connection(name: str) -> bool:

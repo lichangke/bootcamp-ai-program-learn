@@ -63,7 +63,11 @@ POST /api/v1/dbs/{name}/query/natural
 
 ## 测试 mysql db 支持
 
-在 ./w2/db_query/fixtures/test.rest 中添加 MySQL db 支持的测试用例，然后运行测试。如果后端测试 ok,那么打开后端和前端，使用 playwright测试前端，确保 MysQL db的基本功能：
--添加新的数据库 interview_db (url为 mysql://rootalocalhost:3306/interview_db)
+目前 mysql 已经得到支持，在 ./w2/db_query/fixtures/test.rest 中添加 MySQL db 支持的测试用例，然后运行测试。如果后端测试 ok,那么打开后端和前端，使用 playwright测试前端，确保 MysQL db的基本功能：
+-添加新的数据库 interview_db (url为 mysql://root:leacock@localhost:3306/interview_db)
 -生成 sql,查询 interview_db,并显示结果
 -自然语言生成MySQL sql，查询 interview_db,并显示结果
+
+## specs\w2\0001-improvement.md 重构
+
+根据 specs\w2\0001-improvement.md 的重构设计, 完整实现所有 phase,并确保 ./w2/db_query/fixtures/test.rest测试都过

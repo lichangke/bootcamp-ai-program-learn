@@ -1,10 +1,14 @@
 @baseUrl = http://127.0.0.1:8000
 @apiBase = {{baseUrl}}/api/v1
-@dbName = interview_db
-@mysqlUrl = mysql://root:leacock@localhost:3306/interview_db
+@dbName = demo_pg
+@pgUrl = postgres://postgres:postgres@localhost:5432/postgres
 
 ###
-# Health check (implemented)
+# Optional PostgreSQL scenario
+# Prerequisite: local PostgreSQL is running and @pgUrl is reachable.
+
+###
+# Health check
 GET {{baseUrl}}/health
 Accept: application/json
 
@@ -14,47 +18,47 @@ GET {{apiBase}}/dbs
 Accept: application/json
 
 ###
-# Create or update MySQL connection
+# Create or update PostgreSQL connection
 PUT {{apiBase}}/dbs/{{dbName}}
 Content-Type: application/json
 Accept: application/json
 
 {
-  "url": "{{mysqlUrl}}"
+  "url": "{{pgUrl}}"
 }
 
 ###
-# Get MySQL connection with metadata
+# Get PostgreSQL connection with metadata
 GET {{apiBase}}/dbs/{{dbName}}
 Accept: application/json
 
 ###
-# Refresh MySQL metadata
+# Refresh PostgreSQL metadata
 POST {{apiBase}}/dbs/{{dbName}}/refresh
 Accept: application/json
 
 ###
-# Execute MySQL SQL query
+# Execute PostgreSQL SQL query
 POST {{apiBase}}/dbs/{{dbName}}/query
 Content-Type: application/json
 Accept: application/json
 
 {
-  "sql": "SELECT table_name FROM information_schema.tables WHERE table_schema = 'interview_db' LIMIT 10"
+  "sql": "SELECT 1 AS value"
 }
 
 ###
-# Natural language to MySQL SQL
+# Natural language to PostgreSQL SQL
 POST {{apiBase}}/dbs/{{dbName}}/query/natural
 Content-Type: application/json
 Accept: application/json
 
 {
-  "prompt": "list first 10 table names from interview_db"
+  "prompt": "show first 10 tables in current database"
 }
 
 ###
-# Delete connection
+# Delete PostgreSQL connection
 DELETE {{apiBase}}/dbs/{{dbName}}
 Accept: application/json
 
