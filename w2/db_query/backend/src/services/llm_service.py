@@ -251,3 +251,12 @@ class LlmService:
         except ValueError:
             return 1000
         return max(1, min(parsed, 1000))
+
+    def build_fallback_sql(
+        self,
+        *,
+        prompt: str,
+        schema_prompt_context: dict[str, Any],
+        sqlglot_dialect: str,
+    ) -> str:
+        return self._build_fallback_sql(prompt, schema_prompt_context, sqlglot_dialect)

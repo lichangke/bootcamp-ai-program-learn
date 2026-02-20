@@ -43,6 +43,12 @@ class QueryService:
         limited = select_expr.limit(1000)
         return limited.sql(dialect=sqlglot_dialect)
 
+    def probe_query(self, conn: Any, sql: str) -> None:
+        explain_sql = f"EXPLAIN {sql}"
+        with conn.cursor() as cursor:
+            cursor.execute(explain_sql)
+            cursor.fetchone()
+
     def execute_query(self, conn: Any, sql: str, adapter: DbAdapter) -> QueryResult:
         start = time.perf_counter()
         with conn.cursor() as cursor:
