@@ -18,3 +18,5 @@ build/
 coverage/
 *.log
 .env*
+
+./w3/raflow/target/debug/
