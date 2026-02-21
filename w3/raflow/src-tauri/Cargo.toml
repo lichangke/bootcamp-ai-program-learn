@@ -1,0 +1,42 @@
+[package]
+name = "raflow"
+version = "0.1.0"
+description = "RAFlow desktop speech interaction app"
+authors = ["RAFlow Team"]
+edition.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "raflow_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[dependencies]
+tauri.workspace = true
+tauri-plugin-global-shortcut.workspace = true
+tauri-plugin-clipboard-manager.workspace = true
+tauri-plugin-dialog.workspace = true
+tauri-plugin-fs.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+futures-util.workspace = true
+cpal.workspace = true
+rubato.workspace = true
+rtrb.workspace = true
+enigo.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+base64.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+keyring.workspace = true
+rustls.workspace = true
+

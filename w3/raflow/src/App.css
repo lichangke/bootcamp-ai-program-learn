@@ -1,0 +1,308 @@
+:root {
+  font-family: "Manrope", "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #141a22;
+  background:
+    radial-gradient(circle at 8% 2%, #fff8e8 0, #fff8e8 18%, transparent 48%),
+    radial-gradient(circle at 90% 0%, #dbeeff 0, #dbeeff 22%, transparent 54%),
+    linear-gradient(180deg, #f4f8fc 0%, #eef3f8 100%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+.app-shell {
+  margin: 0 auto 2.5rem;
+  max-width: 960px;
+  padding: 2.25rem 1.2rem 2.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+}
+
+.hero p {
+  margin: 0.35rem 0 0;
+  color: #4d5868;
+  max-width: 70ch;
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid #d7e2f0;
+  border-radius: 14px;
+  padding: 1rem 1rem 1.1rem;
+  box-shadow: 0 8px 24px rgba(36, 56, 82, 0.1);
+  backdrop-filter: blur(6px);
+}
+
+h2 {
+  margin-top: 0;
+  margin-bottom: 0.6rem;
+  font-size: 1.08rem;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-bottom: 0.65rem;
+}
+
+button {
+  border-radius: 10px;
+  border: 1px solid #b6c8df;
+  padding: 0.5rem 0.85rem;
+  background: #ffffff;
+  color: #1f2a3a;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 120ms ease;
+}
+
+button:hover {
+  border-color: #4f6f9d;
+  background: #edf5ff;
+}
+
+input {
+  border-radius: 8px;
+  border: 1px solid #c3cfdf;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: #0f172a;
+  background: #f9fbff;
+}
+
+select {
+  border-radius: 8px;
+  border: 1px solid #c3cfdf;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: #0f172a;
+  background: #f9fbff;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: 165px 1fr;
+  gap: 0.55rem 0.8rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.settings-hint {
+  margin: 0.3rem 0 0;
+  color: #5d6978;
+  font-size: 0.88rem;
+}
+
+.control-card {
+  border-left: 5px solid #4f7ec2;
+}
+
+.runtime-meta p {
+  margin: 0.2rem 0;
+}
+
+.perm {
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.perm-granted {
+  color: #1d7448;
+}
+
+.perm-denied {
+  color: #a2353d;
+}
+
+.perm-unknown {
+  color: #6b7280;
+}
+
+.state-inline {
+  font-weight: 700;
+  color: #1f3655;
+}
+
+.mono {
+  font-family: "IBM Plex Mono", "Consolas", "Courier New", monospace;
+  font-size: 0.92rem;
+  color: #2f3b50;
+  margin: 0;
+}
+
+.overlay-card {
+  border-left: 5px solid #2d6ba9;
+}
+
+.overlay-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.overlay-hint {
+  margin: 0 0 0.7rem;
+  color: #506178;
+}
+
+.overlay-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+}
+
+.transcript-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.65rem;
+  border-radius: 10px;
+  border: 1px solid #d6e1ef;
+  background: #f8fbff;
+  min-height: 84px;
+}
+
+.transcript-block span {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.state-badge {
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 0.24rem 0.64rem;
+}
+
+.state-idle {
+  background: #f1f5fb;
+  border-color: #cfdae8;
+  color: #3a4a62;
+}
+
+.state-connecting {
+  background: #eef4ff;
+  border-color: #bfd4ff;
+  color: #21569d;
+}
+
+.state-listening {
+  background: #eaf9f2;
+  border-color: #b8ead0;
+  color: #1d7448;
+}
+
+.state-recording {
+  background: #fdebec;
+  border-color: #f2bdc1;
+  color: #a2353d;
+}
+
+.state-processing {
+  background: #fff6e7;
+  border-color: #f2d9a7;
+  color: #a06f20;
+}
+
+.state-injecting {
+  background: #f0ecff;
+  border-color: #d1c4f7;
+  color: #5f46af;
+}
+
+.state-error {
+  background: #fde9e7;
+  border-color: #f2bdb7;
+  color: #a7322a;
+}
+
+.overlay-hidden p {
+  margin-bottom: 0;
+}
+
+.perf-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3rem 0.8rem;
+}
+
+.perf-grid p {
+  margin: 0;
+}
+
+.edge-card h2 {
+  margin-bottom: 0.45rem;
+}
+
+.edge-card p {
+  margin: 0.2rem 0;
+}
+
+.edge-hint {
+  font-weight: 600;
+}
+
+.edge-auth {
+  border-left: 5px solid #ad3e46;
+}
+
+.edge-network {
+  border-left: 5px solid #3769b4;
+}
+
+.edge-permission {
+  border-left: 5px solid #8a5a1f;
+}
+
+.edge-empty {
+  border-left: 5px solid #557194;
+}
+
+.edge-generic {
+  border-left: 5px solid #5f4b9d;
+}
+
+.error {
+  color: #b42318;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 1.2rem 0.8rem 2rem;
+  }
+
+  .hero h1 {
+    font-size: 1.6rem;
+  }
+
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .overlay-body {
+    grid-template-columns: 1fr;
+  }
+
+  .perf-grid {
+    grid-template-columns: 1fr;
+  }
+}
