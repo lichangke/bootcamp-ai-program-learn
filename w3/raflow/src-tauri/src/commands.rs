@@ -26,6 +26,7 @@ use crate::utils::now_epoch_ms;
 
 const RECORDING_ERROR_EVENT: &str = "recording_error";
 const RECORDING_STATE_EVENT: &str = "recording_state";
+const RECORDING_STOPPED_EVENT: &str = "recording_stopped";
 const DEFAULT_HOTKEY: &str = "Ctrl+N";
 const AUDIO_CHANNEL_CAPACITY: usize = 16;
 const MAX_AUDIO_BATCH_CHUNKS: usize = 3;
@@ -468,6 +469,9 @@ async fn stop_recording_impl(app_handle: &AppHandle, state: &AppState) -> Result
     // events are handled; they will be reset at the next recording start.
 
     emit_state(app_handle, "Idle");
+    if let Err(err) = app_handle.emit(RECORDING_STOPPED_EVENT, true) {
+        warn!("failed to emit recording stopped event: {err}");
+    }
     info!("recording pipeline stopped");
     Ok(())
 }

@@ -454,11 +454,10 @@ function App() {
     try {
       clearTransientError();
       await invoke("stop_recording");
-      await refreshPerformance();
     } catch (invokeError) {
       applyRecordingError(String(invokeError));
     }
-  }, [applyRecordingError, clearTransientError, refreshPerformance]);
+  }, [applyRecordingError, clearTransientError]);
 
   useEffect(() => {
     void refreshStatus();
@@ -513,6 +512,9 @@ function App() {
       listen<string>("recording_error", (event) => {
         applyRecordingError(event.payload);
       }),
+      listen<boolean>("recording_stopped", () => {
+        void refreshPerformance();
+      }),
       listen<string>("session_started", () => {
         setRecordingState("Listening");
         setInputRoute("undetermined");
@@ -531,7 +533,7 @@ function App() {
         void listener.then((unlisten) => unlisten());
       }
     };
-  }, [applyRecordingError, clearTransientError, uiLocale]);
+  }, [applyRecordingError, clearTransientError, refreshPerformance, uiLocale]);
 
   return (
     <main className="app-shell">
