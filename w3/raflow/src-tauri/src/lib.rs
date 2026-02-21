@@ -185,6 +185,12 @@ fn setup_app(app: &mut tauri::App) -> SetupResult<()> {
                 *hotkey = settings.hotkey;
                 let mut threshold = runtime.injection_threshold.lock().await;
                 *threshold = settings.injection_threshold;
+                let mut rewrite_enabled = runtime.partial_rewrite_enabled.lock().await;
+                *rewrite_enabled = settings.partial_rewrite_enabled;
+                let mut rewrite_max_backspace = runtime.partial_rewrite_max_backspace.lock().await;
+                *rewrite_max_backspace = settings.partial_rewrite_max_backspace;
+                let mut rewrite_window_ms = runtime.partial_rewrite_window_ms.lock().await;
+                *rewrite_window_ms = settings.partial_rewrite_window_ms;
             });
         }
         Err(err) => {
@@ -617,6 +623,36 @@ fn is_text_cursor_available() -> bool {
     true
 }
 
+#[derive(Clone)]
+enum PartialInjectionPlan {
+    Append {
+        delta: String,
+        next_injected_text: String,
+    },
+    Rewrite {
+        backspace_count: usize,
+        insert_text: String,
+        next_injected_text: String,
+    },
+}
+
+async fn current_partial_rewrite_config(runtime: &Arc<RuntimeState>) -> (bool, usize, u64) {
+    let enabled = {
+        let value = runtime.partial_rewrite_enabled.lock().await;
+        *value
+    };
+    let max_backspace = {
+        let value = runtime.partial_rewrite_max_backspace.lock().await;
+        *value
+    };
+    let window_ms = {
+        let value = runtime.partial_rewrite_window_ms.lock().await;
+        *value
+    };
+
+    (enabled, max_backspace, window_ms)
+}
+
 async fn inject_partial_transcript_delta(
     app_handle: &tauri::AppHandle,
     runtime: &Arc<RuntimeState>,
@@ -635,6 +671,9 @@ async fn inject_partial_transcript_delta(
         return;
     }
 
+    let (rewrite_enabled, rewrite_max_backspace, rewrite_window_ms) =
+        current_partial_rewrite_config(runtime).await;
+
     let injection_plan = {
         let mut tracker = runtime.live_partial_tracker.lock().await;
         if matches!(tracker.mode, TranscriptInjectionMode::ClipboardOnly) {
@@ -642,23 +681,57 @@ async fn inject_partial_transcript_delta(
         } else if tracker.disabled_until_commit {
             None
         } else if tracker.injected_text.is_empty() {
-            Some((normalized.to_string(), normalized.to_string()))
+            Some(PartialInjectionPlan::Append {
+                delta: normalized.to_string(),
+                next_injected_text: normalized.to_string(),
+            })
         } else if let Some(delta) = normalized.strip_prefix(tracker.injected_text.as_str()) {
             if delta.is_empty() {
                 None
             } else {
-                Some((delta.to_string(), normalized.to_string()))
+                Some(PartialInjectionPlan::Append {
+                    delta: delta.to_string(),
+                    next_injected_text: normalized.to_string(),
+                })
             }
-        } else {
-            // Model revised previous words; avoid uncontrolled duplicates and
-            // wait for committed transcript to recover a stable final text.
+        } else if !rewrite_enabled {
             tracker.disabled_until_commit = true;
             info!("disabled live partial injection due to transcript revision");
             None
+        } else {
+            let common_prefix_chars =
+                common_prefix_char_count(tracker.injected_text.as_str(), normalized);
+            let previous_chars = tracker.injected_text.chars().count();
+            let backspace_count = previous_chars.saturating_sub(common_prefix_chars);
+
+            if backspace_count == 0 {
+                None
+            } else if backspace_count > rewrite_max_backspace {
+                tracker.disabled_until_commit = true;
+                info!(
+                    backspace_count,
+                    rewrite_max_backspace,
+                    "disabled live partial injection due to rewrite backspace limit"
+                );
+                None
+            } else if rewrite_window_ms > 0
+                && tracker.last_rewrite_at_ms > 0
+                && now_ms.saturating_sub(tracker.last_rewrite_at_ms) < rewrite_window_ms
+            {
+                None
+            } else {
+                tracker.last_rewrite_at_ms = now_ms;
+                let insert_text = suffix_from_char_index(normalized, common_prefix_chars);
+                Some(PartialInjectionPlan::Rewrite {
+                    backspace_count,
+                    insert_text,
+                    next_injected_text: normalized.to_string(),
+                })
+            }
         }
     };
 
-    let Some((delta, next_injected_text)) = injection_plan else {
+    let Some(plan) = injection_plan else {
         return;
     };
 
@@ -668,10 +741,20 @@ async fn inject_partial_transcript_delta(
     };
     let inject_started = Instant::now();
     let inject_result = {
+        let plan_for_exec = plan.clone();
         let app_handle = app_handle.clone();
         tauri::async_runtime::spawn_blocking(move || {
             let mut injector = InputInjector::new(threshold)?;
-            injector.inject_text(&delta, &app_handle)
+            match plan_for_exec {
+                PartialInjectionPlan::Append { delta, .. } => {
+                    injector.inject_text(&delta, &app_handle)
+                }
+                PartialInjectionPlan::Rewrite {
+                    backspace_count,
+                    insert_text,
+                    ..
+                } => injector.rewrite_tail(backspace_count, &insert_text, &app_handle),
+            }
         })
         .await
     };
@@ -686,7 +769,14 @@ async fn inject_partial_transcript_delta(
         Ok(Ok(())) => {
             let mut tracker = runtime.live_partial_tracker.lock().await;
             if !tracker.disabled_until_commit {
-                tracker.injected_text = next_injected_text;
+                tracker.injected_text = match plan {
+                    PartialInjectionPlan::Append {
+                        next_injected_text, ..
+                    } => next_injected_text,
+                    PartialInjectionPlan::Rewrite {
+                        next_injected_text, ..
+                    } => next_injected_text,
+                };
                 tracker.mode = TranscriptInjectionMode::RealtimeCursor;
             }
         }
@@ -706,6 +796,31 @@ async fn inject_partial_transcript_delta(
                 tracker.mode = TranscriptInjectionMode::ClipboardOnly;
             }
         }
+    }
+}
+
+fn common_prefix_char_count(left: &str, right: &str) -> usize {
+    left.chars()
+        .zip(right.chars())
+        .take_while(|(l, r)| l == r)
+        .count()
+}
+
+fn suffix_from_char_index(text: &str, char_index: usize) -> String {
+    let mut split_at = text.len();
+    let mut seen = 0_usize;
+    for (byte_index, _) in text.char_indices() {
+        if seen == char_index {
+            split_at = byte_index;
+            break;
+        }
+        seen += 1;
+    }
+
+    if char_index >= text.chars().count() {
+        String::new()
+    } else {
+        text[split_at..].to_string()
     }
 }
 
@@ -769,7 +884,10 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{append_to_pending_clipboard, should_drop_low_confidence_committed};
+    use super::{
+        append_to_pending_clipboard, common_prefix_char_count,
+        should_drop_low_confidence_committed, suffix_from_char_index,
+    };
 
     #[test]
     fn confidence_zero_is_not_dropped() {
@@ -807,5 +925,14 @@ mod tests {
     fn clipboard_pending_buffer_ignores_empty_segment() {
         let mut pending = "existing".to_string();
         assert_eq!(append_to_pending_clipboard(&mut pending, "   "), "existing");
+    }
+
+    #[test]
+    fn partial_rewrite_helpers_compute_expected_suffix() {
+        let before = "modern test";
+        let after = "model test";
+        let prefix = common_prefix_char_count(before, after);
+        assert_eq!(prefix, 4);
+        assert_eq!(suffix_from_char_index(after, prefix), "l test");
     }
 }

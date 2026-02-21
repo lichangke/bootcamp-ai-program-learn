@@ -55,6 +55,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   languageCode: "eng",
   hotkey: "Ctrl+N",
   injectionThreshold: 10,
+  partialRewriteEnabled: true,
+  partialRewriteMaxBackspace: 12,
+  partialRewriteWindowMs: 140,
 };
 
 function classifyError(message: string): EdgeState {
@@ -407,6 +410,29 @@ function App() {
           }
           const normalized = Math.max(1, Math.min(1024, Math.trunc(value)));
           setSettings((current) => ({ ...current, injectionThreshold: normalized }));
+          setSettingsError("");
+          setSaveMessage("");
+        }}
+        onPartialRewriteEnabledChange={(value) => {
+          setSettings((current) => ({ ...current, partialRewriteEnabled: value }));
+          setSettingsError("");
+          setSaveMessage("");
+        }}
+        onPartialRewriteMaxBackspaceChange={(value) => {
+          if (!Number.isFinite(value)) {
+            return;
+          }
+          const normalized = Math.max(0, Math.min(64, Math.trunc(value)));
+          setSettings((current) => ({ ...current, partialRewriteMaxBackspace: normalized }));
+          setSettingsError("");
+          setSaveMessage("");
+        }}
+        onPartialRewriteWindowMsChange={(value) => {
+          if (!Number.isFinite(value)) {
+            return;
+          }
+          const normalized = Math.max(0, Math.min(2000, Math.trunc(value)));
+          setSettings((current) => ({ ...current, partialRewriteWindowMs: normalized }));
           setSettingsError("");
           setSaveMessage("");
         }}

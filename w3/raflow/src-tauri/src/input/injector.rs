@@ -67,6 +67,26 @@ impl InputInjector {
             .map_err(|err| InputError::Clipboard(err.to_string()))
     }
 
+    pub fn rewrite_tail<R: Runtime>(
+        &mut self,
+        backspace_count: usize,
+        insert_text: &str,
+        app_handle: &AppHandle<R>,
+    ) -> Result<(), InputError> {
+        for _ in 0..backspace_count {
+            self.enigo
+                .key(Key::Backspace, Click)
+                .map_err(|err| InputError::Keyboard(err.to_string()))?;
+            std::thread::sleep(Duration::from_millis(4));
+        }
+
+        if insert_text.trim().is_empty() {
+            return Ok(());
+        }
+
+        self.inject_text(insert_text, app_handle)
+    }
+
     fn inject_via_keyboard(&mut self, text: &str) -> Result<(), InputError> {
         for ch in text.chars() {
             self.enigo

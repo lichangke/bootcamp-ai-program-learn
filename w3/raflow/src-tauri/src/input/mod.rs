@@ -5,6 +5,13 @@ use thiserror::Error;
 
 pub const DEFAULT_INJECTION_THRESHOLD: usize = 10;
 pub const MAX_TRANSCRIPT_LENGTH: usize = 10_000;
+pub const DEFAULT_PARTIAL_REWRITE_ENABLED: bool = true;
+pub const DEFAULT_PARTIAL_REWRITE_MAX_BACKSPACE: usize = 12;
+pub const DEFAULT_PARTIAL_REWRITE_WINDOW_MS: u64 = 140;
+pub const MIN_PARTIAL_REWRITE_MAX_BACKSPACE: usize = 0;
+pub const MAX_PARTIAL_REWRITE_MAX_BACKSPACE: usize = 64;
+pub const MIN_PARTIAL_REWRITE_WINDOW_MS: u64 = 0;
+pub const MAX_PARTIAL_REWRITE_WINDOW_MS: u64 = 2_000;
 
 #[derive(Debug, Error)]
 pub enum InputError {

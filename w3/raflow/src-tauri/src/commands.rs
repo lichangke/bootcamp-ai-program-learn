@@ -11,7 +11,12 @@ use tracing::{error, info, warn};
 
 use crate::audio::{AudioCapturer, AudioConfig, ProcessedAudioChunk, audio_processing_task};
 use crate::error::AppError;
-use crate::input::DEFAULT_INJECTION_THRESHOLD;
+use crate::input::{
+    DEFAULT_INJECTION_THRESHOLD, DEFAULT_PARTIAL_REWRITE_ENABLED,
+    DEFAULT_PARTIAL_REWRITE_MAX_BACKSPACE, DEFAULT_PARTIAL_REWRITE_WINDOW_MS,
+    MAX_PARTIAL_REWRITE_MAX_BACKSPACE, MAX_PARTIAL_REWRITE_WINDOW_MS,
+    MIN_PARTIAL_REWRITE_MAX_BACKSPACE, MIN_PARTIAL_REWRITE_WINDOW_MS,
+};
 use crate::metrics::PerformanceReport;
 use crate::network::ScribeClient;
 use crate::permissions::PermissionReport;
@@ -54,6 +59,12 @@ pub struct AppSettings {
     pub hotkey: String,
     #[serde(default = "default_injection_threshold")]
     pub injection_threshold: usize,
+    #[serde(default = "default_partial_rewrite_enabled")]
+    pub partial_rewrite_enabled: bool,
+    #[serde(default = "default_partial_rewrite_max_backspace")]
+    pub partial_rewrite_max_backspace: usize,
+    #[serde(default = "default_partial_rewrite_window_ms")]
+    pub partial_rewrite_window_ms: u64,
 }
 
 impl Default for AppSettings {
@@ -63,6 +74,9 @@ impl Default for AppSettings {
             language_code: default_language_code(),
             hotkey: default_hotkey(),
             injection_threshold: default_injection_threshold(),
+            partial_rewrite_enabled: default_partial_rewrite_enabled(),
+            partial_rewrite_max_backspace: default_partial_rewrite_max_backspace(),
+            partial_rewrite_window_ms: default_partial_rewrite_window_ms(),
         }
     }
 }
@@ -77,6 +91,18 @@ fn default_hotkey() -> String {
 
 fn default_injection_threshold() -> usize {
     DEFAULT_INJECTION_THRESHOLD
+}
+
+fn default_partial_rewrite_enabled() -> bool {
+    DEFAULT_PARTIAL_REWRITE_ENABLED
+}
+
+fn default_partial_rewrite_max_backspace() -> usize {
+    DEFAULT_PARTIAL_REWRITE_MAX_BACKSPACE
+}
+
+fn default_partial_rewrite_window_ms() -> u64 {
+    DEFAULT_PARTIAL_REWRITE_WINDOW_MS
 }
 
 fn read_api_key_from_environment() -> Option<String> {
@@ -313,6 +339,18 @@ async fn save_settings_impl(
     {
         let mut threshold = runtime.injection_threshold.lock().await;
         *threshold = validated.injection_threshold;
+    }
+    {
+        let mut enabled = runtime.partial_rewrite_enabled.lock().await;
+        *enabled = validated.partial_rewrite_enabled;
+    }
+    {
+        let mut max_backspace = runtime.partial_rewrite_max_backspace.lock().await;
+        *max_backspace = validated.partial_rewrite_max_backspace;
+    }
+    {
+        let mut window_ms = runtime.partial_rewrite_window_ms.lock().await;
+        *window_ms = validated.partial_rewrite_window_ms;
     }
 
     if previous.api_key != validated.api_key || previous.language_code != validated.language_code {
@@ -824,6 +862,26 @@ fn normalize_loaded_settings(mut settings: AppSettings) -> AppSettings {
         settings.injection_threshold = DEFAULT_INJECTION_THRESHOLD;
     }
 
+    if !(MIN_PARTIAL_REWRITE_MAX_BACKSPACE..=MAX_PARTIAL_REWRITE_MAX_BACKSPACE)
+        .contains(&settings.partial_rewrite_max_backspace)
+    {
+        warn!(
+            max_backspace = settings.partial_rewrite_max_backspace,
+            "loaded partial rewrite max backspace is out of range; resetting to default"
+        );
+        settings.partial_rewrite_max_backspace = DEFAULT_PARTIAL_REWRITE_MAX_BACKSPACE;
+    }
+
+    if !(MIN_PARTIAL_REWRITE_WINDOW_MS..=MAX_PARTIAL_REWRITE_WINDOW_MS)
+        .contains(&settings.partial_rewrite_window_ms)
+    {
+        warn!(
+            window_ms = settings.partial_rewrite_window_ms,
+            "loaded partial rewrite window ms is out of range; resetting to default"
+        );
+        settings.partial_rewrite_window_ms = DEFAULT_PARTIAL_REWRITE_WINDOW_MS;
+    }
+
     settings
 }
 
@@ -847,6 +905,22 @@ fn validate_settings(mut settings: AppSettings) -> Result<AppSettings, String> {
     {
         return Err(format!(
             "injectionThreshold must be between {MIN_INJECTION_THRESHOLD} and {MAX_INJECTION_THRESHOLD}"
+        ));
+    }
+
+    if !(MIN_PARTIAL_REWRITE_MAX_BACKSPACE..=MAX_PARTIAL_REWRITE_MAX_BACKSPACE)
+        .contains(&settings.partial_rewrite_max_backspace)
+    {
+        return Err(format!(
+            "partialRewriteMaxBackspace must be between {MIN_PARTIAL_REWRITE_MAX_BACKSPACE} and {MAX_PARTIAL_REWRITE_MAX_BACKSPACE}"
+        ));
+    }
+
+    if !(MIN_PARTIAL_REWRITE_WINDOW_MS..=MAX_PARTIAL_REWRITE_WINDOW_MS)
+        .contains(&settings.partial_rewrite_window_ms)
+    {
+        return Err(format!(
+            "partialRewriteWindowMs must be between {MIN_PARTIAL_REWRITE_WINDOW_MS} and {MAX_PARTIAL_REWRITE_WINDOW_MS}"
         ));
     }
 
