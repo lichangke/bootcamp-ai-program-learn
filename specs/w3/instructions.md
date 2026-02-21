@@ -67,11 +67,11 @@
 仔细阅读目前./w3/raflow 的代码，think ultra hard,构建一个更新的 design doc,放在./specs/w3/raflow/0004-design.md文件中，输出为中文,使用mermaid绘制架构,设计,组件,流程等图表并详细说明。You, 16 minutes ago + Uncommitted changes
 
 
-## TODO 降噪
-
+## 降噪
 
 请结合 w3\raflow 代码架构，搜寻合适的 降噪 处理方案，处理以下问题
 1、不说话时，出现其他文字
 2、说话的内容，没有转成文字
 
-nnnoiseless
+nnnoiseless   https://github.com/jneem/nnnoiseless 
+

@@ -1,4 +1,5 @@
 pub mod capturer;
+mod denoiser;
 pub mod resampler;
 
 use std::sync::{
@@ -13,6 +14,7 @@ use tokio::sync::mpsc::error::TrySendError;
 use tokio::time::{Duration, sleep};
 use tracing::{debug, warn};
 
+use self::denoiser::AudioDenoiser;
 pub use capturer::{AudioCapturer, AudioConfig};
 pub use resampler::{AudioResampler, convert_f32_to_i16};
 
@@ -62,6 +64,14 @@ pub async fn audio_processing_task(
     config: AudioConfig,
     dropped_counter: Arc<AtomicU64>,
 ) -> Result<(), AudioError> {
+    let mut denoiser = AudioDenoiser::for_sample_rate(config.input_sample_rate);
+    if denoiser.is_none() {
+        warn!(
+            input_sample_rate = config.input_sample_rate,
+            "nnnoiseless denoiser bypassed because sample rate is not 48kHz"
+        );
+    }
+
     let mut resampler = AudioResampler::new(
         config.input_sample_rate,
         config.target_sample_rate,
@@ -80,7 +90,10 @@ pub async fn audio_processing_task(
             accumulator.extend_from_slice(&chunk);
 
             while accumulator.len() >= target_samples {
-                let to_process: Vec<f32> = accumulator.drain(..target_samples).collect();
+                let mut to_process: Vec<f32> = accumulator.drain(..target_samples).collect();
+                if let Some(denoise) = denoiser.as_mut() {
+                    denoise.process_chunk_in_place(&mut to_process);
+                }
                 let process_start = std::time::Instant::now();
                 let resampled = resampler.process(&to_process)?;
                 if !resampled.is_empty() {
