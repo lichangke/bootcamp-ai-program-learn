@@ -81,5 +81,7 @@ nnnoiseless   https://github.com/jneem/nnnoiseless
 - 有光标时：实时 partial；committed 只补标点
 - 无光标时：只走 committed + 剪贴板累计追加（不覆盖）
 
-## 实时数据矫正功能
+## 有光标时实时数据矫正功能
+
+## 界面新增 中英文 切换
 

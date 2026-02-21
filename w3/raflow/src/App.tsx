@@ -40,6 +40,7 @@ type PerformanceReport = {
 };
 
 type AppSettings = SettingsDraft;
+type UiLocale = "en" | "zh";
 
 type EdgeStateKind = "auth" | "network" | "permission" | "empty" | "generic";
 
@@ -60,7 +61,128 @@ const DEFAULT_SETTINGS: AppSettings = {
   partialRewriteWindowMs: 140,
 };
 
-function classifyError(message: string): EdgeState {
+const UI_LOCALE_STORAGE_KEY = "raflow.ui.locale";
+
+const UI_COPY = {
+  en: {
+    heroTitle: "RAFlow Desktop Console",
+    heroSubtitle: "Configure speech transcription, control recording, and monitor realtime states.",
+    uiLanguageLabel: "Interface Language",
+    uiLanguageZh: "Chinese",
+    uiLanguageEn: "English",
+    runtimeControl: "Runtime Control",
+    refresh: "Refresh",
+    checkPermissions: "Check Permissions",
+    refreshMetrics: "Refresh Metrics",
+    start: "Start",
+    stopAndFlush: "Stop + Flush",
+    backend: "Backend",
+    ready: "ready",
+    notReady: "not ready",
+    loading: "loading...",
+    state: "State",
+    errorPrefix: "Error",
+    permissionHealth: "Permission Health",
+    microphone: "Microphone",
+    accessibility: "Accessibility",
+    performanceReport: "Performance Report",
+    audioP95: "Audio Processing P95",
+    networkP95: "Network Send P95",
+    injectionP95: "Injection P95",
+    endToEndP95: "End-to-End P95",
+    sent: "Sent",
+    dropped: "Dropped",
+    audio: "audio",
+    committed: "committed",
+    allTrackedGood: "All tracked metrics are within expected range.",
+    overlayHidden: "Overlay Hidden",
+    overlayHiddenHint: 'Use tray menu action "Show/Hide Overlay" to display realtime transcript preview.',
+    settingsSaved: "Settings saved and applied.",
+    permissionMissingTitle: "Permission Missing",
+    permissionMissingHint: "Open OS settings and grant required permissions.",
+    permissionGranted: "granted",
+    permissionDenied: "denied",
+    permissionUnknown: "unknown",
+    authTitle: "Authentication Failed",
+    authHint: "Check API key validity in Settings, then save again.",
+    networkTitle: "Network Unavailable",
+    networkHint: "Check connectivity and retry start recording.",
+    permissionTitle: "Permission Missing",
+    permissionHint: "Grant microphone/accessibility permissions in OS settings.",
+    genericTitle: "Runtime Error",
+    genericHint: "Retry the action. If it persists, inspect logs.",
+    emptyTitle: "Empty Transcript",
+    emptyDetail: "A committed transcript arrived without text content.",
+    emptyHint: "Speak clearly and keep recording slightly longer.",
+  },
+  zh: {
+    heroTitle: "RAFlow 桌面控制台",
+    heroSubtitle: "配置语音转写、控制录制流程并监控实时状态。",
+    uiLanguageLabel: "界面语言",
+    uiLanguageZh: "中文",
+    uiLanguageEn: "English",
+    runtimeControl: "运行控制",
+    refresh: "刷新",
+    checkPermissions: "检查权限",
+    refreshMetrics: "刷新指标",
+    start: "开始",
+    stopAndFlush: "停止并刷新",
+    backend: "后端",
+    ready: "就绪",
+    notReady: "未就绪",
+    loading: "加载中...",
+    state: "状态",
+    errorPrefix: "错误",
+    permissionHealth: "权限健康",
+    microphone: "麦克风",
+    accessibility: "辅助功能",
+    performanceReport: "性能报告",
+    audioP95: "音频处理 P95",
+    networkP95: "网络发送 P95",
+    injectionP95: "注入 P95",
+    endToEndP95: "端到端 P95",
+    sent: "已发送",
+    dropped: "丢弃",
+    audio: "音频",
+    committed: "已确认文本",
+    allTrackedGood: "所有指标均在预期范围内。",
+    overlayHidden: "悬浮窗已隐藏",
+    overlayHiddenHint: '可通过托盘菜单的“Show/Hide Overlay”重新显示实时预览。',
+    settingsSaved: "设置已保存并生效。",
+    permissionMissingTitle: "权限缺失",
+    permissionMissingHint: "请在系统设置中授予所需权限。",
+    permissionGranted: "已授权",
+    permissionDenied: "已拒绝",
+    permissionUnknown: "未知",
+    authTitle: "鉴权失败",
+    authHint: "请在设置中检查 API Key 并重新保存。",
+    networkTitle: "网络不可用",
+    networkHint: "请检查网络连接后重试开始录制。",
+    permissionTitle: "权限缺失",
+    permissionHint: "请在系统中授予麦克风和辅助功能权限。",
+    genericTitle: "运行时错误",
+    genericHint: "请重试；若仍失败，请检查日志。",
+    emptyTitle: "空转写",
+    emptyDetail: "收到了 committed_transcript，但文本为空。",
+    emptyHint: "请更清晰说话并稍微延长录制时间。",
+  },
+} as const;
+
+function detectInitialLocale(): UiLocale {
+  if (typeof window === "undefined") {
+    return "en";
+  }
+
+  const stored = window.localStorage.getItem(UI_LOCALE_STORAGE_KEY);
+  if (stored === "zh" || stored === "en") {
+    return stored;
+  }
+
+  return window.navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en";
+}
+
+function classifyError(message: string, locale: UiLocale): EdgeState {
+  const copy = UI_COPY[locale];
   const normalized = message.toLowerCase();
   if (
     normalized.includes("api key") ||
@@ -69,9 +191,9 @@ function classifyError(message: string): EdgeState {
   ) {
     return {
       kind: "auth",
-      title: "Authentication Failed",
+      title: copy.authTitle,
       detail: message,
-      recoverHint: "Check API key validity in Settings, then save again.",
+      recoverHint: copy.authHint,
     };
   }
 
@@ -83,9 +205,9 @@ function classifyError(message: string): EdgeState {
   ) {
     return {
       kind: "network",
-      title: "Network Unavailable",
+      title: copy.networkTitle,
       detail: message,
-      recoverHint: "Check connectivity and retry start recording.",
+      recoverHint: copy.networkHint,
     };
   }
 
@@ -97,30 +219,67 @@ function classifyError(message: string): EdgeState {
   ) {
     return {
       kind: "permission",
-      title: "Permission Missing",
+      title: copy.permissionTitle,
       detail: message,
-      recoverHint: "Grant microphone/accessibility permissions in OS settings.",
+      recoverHint: copy.permissionHint,
     };
   }
 
   return {
     kind: "generic",
-    title: "Runtime Error",
+    title: copy.genericTitle,
     detail: message,
-    recoverHint: "Retry the action. If it persists, inspect logs.",
+    recoverHint: copy.genericHint,
   };
 }
 
-function emptyTranscriptState(): EdgeState {
+function emptyTranscriptState(locale: UiLocale): EdgeState {
+  const copy = UI_COPY[locale];
   return {
     kind: "empty",
-    title: "Empty Transcript",
-    detail: "A committed transcript arrived without text content.",
-    recoverHint: "Speak clearly and keep recording slightly longer.",
+    title: copy.emptyTitle,
+    detail: copy.emptyDetail,
+    recoverHint: copy.emptyHint,
   };
+}
+
+function translateRecordingState(stateLabel: string, locale: UiLocale): string {
+  if (locale === "en") {
+    return stateLabel;
+  }
+
+  switch (stateLabel) {
+    case "Connecting":
+      return "连接中";
+    case "Listening":
+      return "监听中";
+    case "Recording":
+      return "录制中";
+    case "Processing":
+      return "处理中";
+    case "Injecting":
+      return "注入中";
+    case "Error":
+      return "错误";
+    default:
+      return "空闲";
+  }
+}
+
+function translatePermissionState(state: PermissionState, locale: UiLocale): string {
+  const copy = UI_COPY[locale];
+  switch (state) {
+    case "granted":
+      return copy.permissionGranted;
+    case "denied":
+      return copy.permissionDenied;
+    default:
+      return copy.permissionUnknown;
+  }
 }
 
 function App() {
+  const [uiLocale, setUiLocale] = useState<UiLocale>(() => detectInitialLocale());
   const [status, setStatus] = useState<BackendStatus | null>(null);
   const [recordingError, setRecordingError] = useState<string>("");
   const [settingsError, setSettingsError] = useState<string>("");
@@ -134,6 +293,7 @@ function App() {
   const [isSavingSettings, setIsSavingSettings] = useState<boolean>(false);
   const [permissions, setPermissions] = useState<PermissionReport | null>(null);
   const [performance, setPerformance] = useState<PerformanceReport | null>(null);
+  const copy = UI_COPY[uiLocale];
 
   const applyRecordingError = useCallback((message: string) => {
     const trimmed = message.trim();
@@ -141,8 +301,8 @@ function App() {
       return;
     }
     setRecordingError(trimmed);
-    setEdgeState(classifyError(trimmed));
-  }, []);
+    setEdgeState(classifyError(trimmed, uiLocale));
+  }, [uiLocale]);
 
   const clearTransientError = useCallback(() => {
     setRecordingError("");
@@ -166,9 +326,9 @@ function App() {
       if (report.microphone === "denied" || report.accessibility === "denied") {
         setEdgeState({
           kind: "permission",
-          title: "Permission Missing",
+          title: copy.permissionMissingTitle,
           detail: report.guidance.join(" "),
-          recoverHint: "Open OS settings and grant required permissions.",
+          recoverHint: copy.permissionMissingHint,
         });
       }
     } catch (invokeError) {
@@ -202,16 +362,16 @@ function App() {
     try {
       const saved = await invoke<AppSettings>("save_settings", { settings });
       setSettings(saved);
-      setSaveMessage("Settings saved and applied.");
+      setSaveMessage(copy.settingsSaved);
       clearTransientError();
     } catch (invokeError) {
       const message = String(invokeError);
       setSettingsError(message);
-      setEdgeState(classifyError(message));
+      setEdgeState(classifyError(message, uiLocale));
     } finally {
       setIsSavingSettings(false);
     }
-  }, [clearTransientError, settings]);
+  }, [clearTransientError, copy.settingsSaved, settings, uiLocale]);
 
   const startRecording = useCallback(async () => {
     try {
@@ -240,6 +400,12 @@ function App() {
   }, [loadSettings, refreshPermissions, refreshPerformance, refreshStatus]);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(UI_LOCALE_STORAGE_KEY, uiLocale);
+    }
+  }, [uiLocale]);
+
+  useEffect(() => {
     const listeners = [
       listen<string>("partial_transcript", (event) => {
         setPartialTranscript(event.payload);
@@ -248,7 +414,7 @@ function App() {
         const text = event.payload;
         setCommittedTranscript(text);
         if (!text.trim()) {
-          setEdgeState(emptyTranscriptState());
+          setEdgeState(emptyTranscriptState(uiLocale));
           return;
         }
         setEdgeState((current) => (current?.kind === "empty" ? null : current));
@@ -276,58 +442,80 @@ function App() {
         void listener.then((unlisten) => unlisten());
       }
     };
-  }, [applyRecordingError, clearTransientError]);
+  }, [applyRecordingError, clearTransientError, uiLocale]);
 
   return (
     <main className="app-shell">
       <header className="hero">
-        <h1>RAFlow Desktop Console</h1>
-        <p>Configure speech transcription, control recording, and monitor realtime states.</p>
+        <h1>{copy.heroTitle}</h1>
+        <p>{copy.heroSubtitle}</p>
+        <div className="row locale-switch">
+          <span className="locale-label">{copy.uiLanguageLabel}</span>
+          <button
+            type="button"
+            className={uiLocale === "zh" ? "locale-btn active" : "locale-btn"}
+            onClick={() => setUiLocale("zh")}
+          >
+            {copy.uiLanguageZh}
+          </button>
+          <button
+            type="button"
+            className={uiLocale === "en" ? "locale-btn active" : "locale-btn"}
+            onClick={() => setUiLocale("en")}
+          >
+            {copy.uiLanguageEn}
+          </button>
+        </div>
       </header>
 
       <section className="card control-card">
-        <h2>Runtime Control</h2>
+        <h2>{copy.runtimeControl}</h2>
         <div className="row">
           <button type="button" onClick={() => void refreshStatus()}>
-            Refresh
+            {copy.refresh}
           </button>
           <button type="button" onClick={() => void refreshPermissions()}>
-            Check Permissions
+            {copy.checkPermissions}
           </button>
           <button type="button" onClick={() => void refreshPerformance()}>
-            Refresh Metrics
+            {copy.refreshMetrics}
           </button>
           <button type="button" onClick={() => void startRecording()}>
-            Start
+            {copy.start}
           </button>
           <button type="button" onClick={() => void stopRecording()}>
-            Stop + Flush
+            {copy.stopAndFlush}
           </button>
         </div>
         <div className="runtime-meta">
           <p>
-            <strong>Backend:</strong>{" "}
+            <strong>{copy.backend}:</strong>{" "}
             {status
-              ? `${status.service} ${status.version} (${status.ready ? "ready" : "not ready"})`
-              : "loading..."}
+              ? `${status.service} ${status.version} (${status.ready ? copy.ready : copy.notReady})`
+              : copy.loading}
           </p>
           <p>
-            <strong>State:</strong> <span className="state-inline">{recordingState}</span>
+            <strong>{copy.state}:</strong>{" "}
+            <span className="state-inline">{translateRecordingState(recordingState, uiLocale)}</span>
           </p>
         </div>
-        {recordingError ? <p className="error">Error: {recordingError}</p> : null}
+        {recordingError ? <p className="error">{copy.errorPrefix}: {recordingError}</p> : null}
       </section>
 
       {permissions ? (
         <section className="card">
-          <h2>Permission Health</h2>
+          <h2>{copy.permissionHealth}</h2>
           <p>
-            <strong>Microphone:</strong>{" "}
-            <span className={`perm perm-${permissions.microphone}`}>{permissions.microphone}</span>
+            <strong>{copy.microphone}:</strong>{" "}
+            <span className={`perm perm-${permissions.microphone}`}>
+              {translatePermissionState(permissions.microphone, uiLocale)}
+            </span>
           </p>
           <p>
-            <strong>Accessibility:</strong>{" "}
-            <span className={`perm perm-${permissions.accessibility}`}>{permissions.accessibility}</span>
+            <strong>{copy.accessibility}:</strong>{" "}
+            <span className={`perm perm-${permissions.accessibility}`}>
+              {translatePermissionState(permissions.accessibility, uiLocale)}
+            </span>
           </p>
           <p>{permissions.guidance.join(" ")}</p>
         </section>
@@ -335,32 +523,32 @@ function App() {
 
       {performance ? (
         <section className="card">
-          <h2>Performance Report</h2>
+          <h2>{copy.performanceReport}</h2>
           <div className="perf-grid">
             <p>
-              <strong>Audio Processing P95:</strong> {performance.audioProcessing.p95Ms}ms
+              <strong>{copy.audioP95}:</strong> {performance.audioProcessing.p95Ms}ms
             </p>
             <p>
-              <strong>Network Send P95:</strong> {performance.networkSend.p95Ms}ms
+              <strong>{copy.networkP95}:</strong> {performance.networkSend.p95Ms}ms
             </p>
             <p>
-              <strong>Injection P95:</strong> {performance.injection.p95Ms}ms
+              <strong>{copy.injectionP95}:</strong> {performance.injection.p95Ms}ms
             </p>
             <p>
-              <strong>End-to-End P95:</strong> {performance.endToEnd.p95Ms}ms
+              <strong>{copy.endToEndP95}:</strong> {performance.endToEnd.p95Ms}ms
             </p>
           </div>
           <p>
-            <strong>Sent:</strong> {performance.sentAudioChunks} chunks in {performance.sentAudioBatches} batches
+            <strong>{copy.sent}:</strong> {performance.sentAudioChunks} chunks in {performance.sentAudioBatches} batches
           </p>
           <p>
-            <strong>Dropped:</strong> audio {performance.droppedAudioChunks}, committed{" "}
+            <strong>{copy.dropped}:</strong> {copy.audio} {performance.droppedAudioChunks}, {copy.committed}{" "}
             {performance.droppedCommittedTranscripts}
           </p>
           {performance.warnings.length > 0 ? (
             <p className="error">{performance.warnings.join(" ")}</p>
           ) : (
-            <p>All tracked metrics are within expected range.</p>
+            <p>{copy.allTrackedGood}</p>
           )}
         </section>
       ) : null}
@@ -375,6 +563,7 @@ function App() {
 
       {overlayVisible ? (
         <OverlayWindow
+          uiLocale={uiLocale}
           stateLabel={recordingState}
           partialTranscript={partialTranscript}
           committedTranscript={committedTranscript}
@@ -382,12 +571,13 @@ function App() {
         />
       ) : (
         <section className="card overlay-hidden">
-          <h2>Overlay Hidden</h2>
-          <p>Use tray menu action "Show/Hide Overlay" to display realtime transcript preview.</p>
+          <h2>{copy.overlayHidden}</h2>
+          <p>{copy.overlayHiddenHint}</p>
         </section>
       )}
 
       <SettingsPanel
+        uiLocale={uiLocale}
         settings={settings}
         onApiKeyChange={(value) => {
           setSettings((current) => ({ ...current, apiKey: value }));
