@@ -12,10 +12,10 @@ use tracing::{error, info, warn};
 use crate::audio::{AudioCapturer, AudioConfig, ProcessedAudioChunk, audio_processing_task};
 use crate::error::AppError;
 use crate::input::{
-    DEFAULT_INJECTION_THRESHOLD, DEFAULT_PARTIAL_REWRITE_ENABLED,
-    DEFAULT_PARTIAL_REWRITE_MAX_BACKSPACE, DEFAULT_PARTIAL_REWRITE_WINDOW_MS,
-    MAX_PARTIAL_REWRITE_MAX_BACKSPACE, MAX_PARTIAL_REWRITE_WINDOW_MS,
-    MIN_PARTIAL_REWRITE_MAX_BACKSPACE, MIN_PARTIAL_REWRITE_WINDOW_MS,
+    DEFAULT_PARTIAL_REWRITE_ENABLED, DEFAULT_PARTIAL_REWRITE_MAX_BACKSPACE,
+    DEFAULT_PARTIAL_REWRITE_WINDOW_MS, MAX_PARTIAL_REWRITE_MAX_BACKSPACE,
+    MAX_PARTIAL_REWRITE_WINDOW_MS, MIN_PARTIAL_REWRITE_MAX_BACKSPACE,
+    MIN_PARTIAL_REWRITE_WINDOW_MS,
 };
 use crate::metrics::PerformanceReport;
 use crate::network::ScribeClient;
@@ -26,8 +26,6 @@ use crate::state::{AppState, ClientBinding, CommittedTranscript, RecordingSessio
 const RECORDING_ERROR_EVENT: &str = "recording_error";
 const RECORDING_STATE_EVENT: &str = "recording_state";
 const DEFAULT_HOTKEY: &str = "Ctrl+N";
-const MIN_INJECTION_THRESHOLD: usize = 1;
-const MAX_INJECTION_THRESHOLD: usize = 1024;
 const AUDIO_CHANNEL_CAPACITY: usize = 16;
 const MAX_AUDIO_BATCH_CHUNKS: usize = 3;
 const MAX_AUDIO_BATCH_DELAY_MS: u64 = 180;
@@ -57,8 +55,6 @@ pub struct AppSettings {
     pub language_code: String,
     #[serde(default = "default_hotkey")]
     pub hotkey: String,
-    #[serde(default = "default_injection_threshold")]
-    pub injection_threshold: usize,
     #[serde(default = "default_partial_rewrite_enabled")]
     pub partial_rewrite_enabled: bool,
     #[serde(default = "default_partial_rewrite_max_backspace")]
@@ -73,7 +69,6 @@ impl Default for AppSettings {
             api_key: String::new(),
             language_code: default_language_code(),
             hotkey: default_hotkey(),
-            injection_threshold: default_injection_threshold(),
             partial_rewrite_enabled: default_partial_rewrite_enabled(),
             partial_rewrite_max_backspace: default_partial_rewrite_max_backspace(),
             partial_rewrite_window_ms: default_partial_rewrite_window_ms(),
@@ -87,10 +82,6 @@ fn default_language_code() -> String {
 
 fn default_hotkey() -> String {
     DEFAULT_HOTKEY.to_string()
-}
-
-fn default_injection_threshold() -> usize {
-    DEFAULT_INJECTION_THRESHOLD
 }
 
 fn default_partial_rewrite_enabled() -> bool {
@@ -335,10 +326,6 @@ async fn save_settings_impl(
     {
         let mut hotkey = runtime.current_hotkey.lock().await;
         *hotkey = validated.hotkey.clone();
-    }
-    {
-        let mut threshold = runtime.injection_threshold.lock().await;
-        *threshold = validated.injection_threshold;
     }
     {
         let mut enabled = runtime.partial_rewrite_enabled.lock().await;
@@ -853,15 +840,6 @@ fn normalize_loaded_settings(mut settings: AppSettings) -> AppSettings {
     settings.language_code = normalize_language_code(&settings.language_code);
     settings.hotkey = normalize_hotkey(&settings.hotkey);
 
-    if !(MIN_INJECTION_THRESHOLD..=MAX_INJECTION_THRESHOLD).contains(&settings.injection_threshold)
-    {
-        warn!(
-            threshold = settings.injection_threshold,
-            "loaded injection threshold is out of range; resetting to default"
-        );
-        settings.injection_threshold = DEFAULT_INJECTION_THRESHOLD;
-    }
-
     if !(MIN_PARTIAL_REWRITE_MAX_BACKSPACE..=MAX_PARTIAL_REWRITE_MAX_BACKSPACE)
         .contains(&settings.partial_rewrite_max_backspace)
     {
@@ -900,13 +878,6 @@ fn validate_settings(mut settings: AppSettings) -> Result<AppSettings, String> {
     }
     validate_hotkey(trimmed_hotkey)?;
     settings.hotkey = trimmed_hotkey.to_string();
-
-    if !(MIN_INJECTION_THRESHOLD..=MAX_INJECTION_THRESHOLD).contains(&settings.injection_threshold)
-    {
-        return Err(format!(
-            "injectionThreshold must be between {MIN_INJECTION_THRESHOLD} and {MAX_INJECTION_THRESHOLD}"
-        ));
-    }
 
     if !(MIN_PARTIAL_REWRITE_MAX_BACKSPACE..=MAX_PARTIAL_REWRITE_MAX_BACKSPACE)
         .contains(&settings.partial_rewrite_max_backspace)

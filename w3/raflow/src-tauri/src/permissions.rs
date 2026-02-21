@@ -1,6 +1,5 @@
 use serde::Serialize;
 
-use crate::input::DEFAULT_INJECTION_THRESHOLD;
 use crate::input::injector::InputInjector;
 
 #[derive(Debug, Clone, Serialize)]
@@ -71,7 +70,7 @@ fn check_microphone_permission() -> PermissionState {
 fn check_accessibility_permission() -> PermissionState {
     #[cfg(desktop)]
     {
-        match InputInjector::new(DEFAULT_INJECTION_THRESHOLD) {
+        match InputInjector::new() {
             Ok(_) => PermissionState::Granted,
             Err(err) => {
                 let message = err.to_string().to_lowercase();

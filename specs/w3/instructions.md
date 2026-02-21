@@ -62,11 +62,6 @@
 **开始录制后，不说话，等一会儿会光标处出现一些文字**
 
 
-## 生成更新的 design doc
-
-仔细阅读目前./w3/raflow 的代码，think ultra hard,构建一个更新的 design doc,放在./specs/w3/raflow/0004-design.md文件中，输出为中文,使用mermaid绘制架构,设计,组件,流程等图表并详细说明。You, 16 minutes ago + Uncommitted changes
-
-
 ## 降噪
 
 请结合 w3\raflow 代码架构，搜寻合适的 降噪 处理方案，处理以下问题
@@ -85,3 +80,14 @@ nnnoiseless   https://github.com/jneem/nnnoiseless
 
 ## 界面新增 中英文 切换
 
+## 注入阈值
+
+规则改成：
+
+有光标：无论长度都逐字输入
+无光标：才走剪贴板
+
+
+## 生成更新的 design doc
+
+仔细阅读目前./w3/raflow 的代码，think ultra hard,构建一个更新的 design doc,放在./specs/w3/raflow/0004-design.md文件中，输出为中文,使用mermaid绘制架构,设计,组件,流程等图表并详细说明。You, 16 minutes ago + Uncommitted changes

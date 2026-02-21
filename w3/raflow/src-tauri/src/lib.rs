@@ -37,6 +37,7 @@ const EVENT_SESSION_STARTED: &str = "session_started";
 const EVENT_RECORDING_ERROR: &str = "recording_error";
 const EVENT_RECORDING_STATE: &str = "recording_state";
 const EVENT_OVERLAY_VISIBILITY_CHANGED: &str = "overlay_visibility_changed";
+const EVENT_INPUT_ROUTE_CHANGED: &str = "input_route_changed";
 const FALLBACK_HOTKEY: &str = "Ctrl+N";
 const MIN_COMMITTED_CONFIDENCE: f32 = 0.10;
 const MAX_COMMIT_INACTIVE_MS: u64 = 6_000;
@@ -183,8 +184,6 @@ fn setup_app(app: &mut tauri::App) -> SetupResult<()> {
             tauri::async_runtime::block_on(async {
                 let mut hotkey = runtime.current_hotkey.lock().await;
                 *hotkey = settings.hotkey;
-                let mut threshold = runtime.injection_threshold.lock().await;
-                *threshold = settings.injection_threshold;
                 let mut rewrite_enabled = runtime.partial_rewrite_enabled.lock().await;
                 *rewrite_enabled = settings.partial_rewrite_enabled;
                 let mut rewrite_max_backspace = runtime.partial_rewrite_max_backspace.lock().await;
@@ -277,6 +276,7 @@ async fn handle_scribe_event(
     match event {
         ScribeEvent::SessionStarted { session_id, .. } => {
             info!(session_id = session_id.as_str(), "scribe session started");
+            set_input_route_mode(app_handle, runtime, TranscriptInjectionMode::Undetermined).await;
             emit_string_event(app_handle, EVENT_RECORDING_STATE, "Listening");
             emit_string_event(app_handle, EVENT_SESSION_STARTED, &session_id);
         }
@@ -286,11 +286,13 @@ async fn handle_scribe_event(
             emit_string_event(app_handle, EVENT_PARTIAL_TRANSCRIPT, &normalized_text);
 
             if !is_text_cursor_available() {
-                let mut tracker = runtime.live_partial_tracker.lock().await;
-                tracker.mode = TranscriptInjectionMode::ClipboardOnly;
+                set_input_route_mode(app_handle, runtime, TranscriptInjectionMode::ClipboardOnly)
+                    .await;
                 return;
             }
 
+            set_input_route_mode(app_handle, runtime, TranscriptInjectionMode::RealtimeCursor)
+                .await;
             inject_partial_transcript_delta(app_handle, runtime, &normalized_text).await;
         }
         ScribeEvent::CommittedTranscript {
@@ -332,16 +334,27 @@ async fn handle_scribe_event(
                 return;
             }
 
+            let cursor_available = is_text_cursor_available();
+            let mut route_mode_changed: Option<TranscriptInjectionMode> = None;
             let (text_for_injection, pending_clipboard_text) = {
                 let mut tracker = runtime.live_partial_tracker.lock().await;
-                if !tracker.injected_text.trim().is_empty() {
-                    let punctuation_only = resolve_committed_punctuation_delta(
-                        &committed_text,
-                        &tracker.injected_text,
-                    );
+                if cursor_available {
+                    if !matches!(tracker.mode, TranscriptInjectionMode::RealtimeCursor) {
+                        tracker.mode = TranscriptInjectionMode::RealtimeCursor;
+                        route_mode_changed = Some(TranscriptInjectionMode::RealtimeCursor);
+                    }
+                    let resolved_for_cursor = if !tracker.injected_text.trim().is_empty() {
+                        resolve_committed_punctuation_delta(&committed_text, &tracker.injected_text)
+                    } else {
+                        committed_text.clone()
+                    };
                     tracker.reset_after_commit();
-                    (punctuation_only, None)
+                    (resolved_for_cursor, None)
                 } else {
+                    if !matches!(tracker.mode, TranscriptInjectionMode::ClipboardOnly) {
+                        tracker.mode = TranscriptInjectionMode::ClipboardOnly;
+                        route_mode_changed = Some(TranscriptInjectionMode::ClipboardOnly);
+                    }
                     let pending_clipboard_text = append_to_pending_clipboard(
                         &mut tracker.pending_clipboard_text,
                         &committed_text,
@@ -350,6 +363,9 @@ async fn handle_scribe_event(
                     (String::new(), Some(pending_clipboard_text))
                 }
             };
+            if let Some(mode) = route_mode_changed {
+                emit_input_route_changed(app_handle, mode);
+            }
 
             if let Some(pending_text) = pending_clipboard_text {
                 if let Err(err) = InputInjector::write_clipboard_only(&pending_text, app_handle) {
@@ -442,16 +458,11 @@ fn spawn_injection_dispatcher(app_handle: tauri::AppHandle, runtime: Arc<Runtime
                 };
 
                 emit_string_event(&app_handle, EVENT_RECORDING_STATE, "Injecting");
-
-                let threshold = {
-                    let threshold = runtime.injection_threshold.lock().await;
-                    *threshold
-                };
                 let inject_started = Instant::now();
                 let inject_result = {
                     let app_handle = app_handle.clone();
                     tauri::async_runtime::spawn_blocking(move || {
-                        let mut injector = InputInjector::new(threshold)?;
+                        let mut injector = InputInjector::new()?;
                         injector.inject_text(&transcript.text, &app_handle)
                     })
                     .await
@@ -532,6 +543,42 @@ fn emit_string_event(app_handle: &tauri::AppHandle, event_name: &str, value: &st
 fn emit_bool_event(app_handle: &tauri::AppHandle, event_name: &str, value: bool) {
     if let Err(err) = app_handle.emit(event_name, value) {
         warn!(event_name = event_name, "failed to emit bool event: {err}");
+    }
+}
+
+fn input_route_event_value(mode: TranscriptInjectionMode) -> &'static str {
+    match mode {
+        TranscriptInjectionMode::Undetermined => "undetermined",
+        TranscriptInjectionMode::RealtimeCursor => "cursor_input",
+        TranscriptInjectionMode::ClipboardOnly => "clipboard_mode",
+    }
+}
+
+fn emit_input_route_changed(app_handle: &tauri::AppHandle, mode: TranscriptInjectionMode) {
+    emit_string_event(
+        app_handle,
+        EVENT_INPUT_ROUTE_CHANGED,
+        input_route_event_value(mode),
+    );
+}
+
+async fn set_input_route_mode(
+    app_handle: &tauri::AppHandle,
+    runtime: &Arc<RuntimeState>,
+    next_mode: TranscriptInjectionMode,
+) {
+    let should_emit = {
+        let mut tracker = runtime.live_partial_tracker.lock().await;
+        if tracker.mode == next_mode {
+            false
+        } else {
+            tracker.mode = next_mode;
+            true
+        }
+    };
+
+    if should_emit {
+        emit_input_route_changed(app_handle, next_mode);
     }
 }
 
@@ -676,9 +723,7 @@ async fn inject_partial_transcript_delta(
 
     let injection_plan = {
         let mut tracker = runtime.live_partial_tracker.lock().await;
-        if matches!(tracker.mode, TranscriptInjectionMode::ClipboardOnly) {
-            None
-        } else if tracker.disabled_until_commit {
+        if tracker.disabled_until_commit {
             None
         } else if tracker.injected_text.is_empty() {
             Some(PartialInjectionPlan::Append {
@@ -734,17 +779,12 @@ async fn inject_partial_transcript_delta(
     let Some(plan) = injection_plan else {
         return;
     };
-
-    let threshold = {
-        let threshold = runtime.injection_threshold.lock().await;
-        *threshold
-    };
     let inject_started = Instant::now();
     let inject_result = {
         let plan_for_exec = plan.clone();
         let app_handle = app_handle.clone();
         tauri::async_runtime::spawn_blocking(move || {
-            let mut injector = InputInjector::new(threshold)?;
+            let mut injector = InputInjector::new()?;
             match plan_for_exec {
                 PartialInjectionPlan::Append { delta, .. } => {
                     injector.inject_text(&delta, &app_handle)
@@ -767,6 +807,7 @@ async fn inject_partial_transcript_delta(
 
     match inject_result {
         Ok(Ok(())) => {
+            let mut route_changed = false;
             let mut tracker = runtime.live_partial_tracker.lock().await;
             if !tracker.disabled_until_commit {
                 tracker.injected_text = match plan {
@@ -777,24 +818,25 @@ async fn inject_partial_transcript_delta(
                         next_injected_text, ..
                     } => next_injected_text,
                 };
-                tracker.mode = TranscriptInjectionMode::RealtimeCursor;
+                if !matches!(tracker.mode, TranscriptInjectionMode::RealtimeCursor) {
+                    tracker.mode = TranscriptInjectionMode::RealtimeCursor;
+                    route_changed = true;
+                }
+            }
+            drop(tracker);
+            if route_changed {
+                emit_input_route_changed(app_handle, TranscriptInjectionMode::RealtimeCursor);
             }
         }
         Ok(Err(err)) => {
             warn!("failed to inject partial transcript delta: {err}");
             let mut tracker = runtime.live_partial_tracker.lock().await;
             tracker.disabled_until_commit = true;
-            if matches!(tracker.mode, TranscriptInjectionMode::Undetermined) {
-                tracker.mode = TranscriptInjectionMode::ClipboardOnly;
-            }
         }
         Err(err) => {
             warn!("failed to run partial injection task: {err}");
             let mut tracker = runtime.live_partial_tracker.lock().await;
             tracker.disabled_until_commit = true;
-            if matches!(tracker.mode, TranscriptInjectionMode::Undetermined) {
-                tracker.mode = TranscriptInjectionMode::ClipboardOnly;
-            }
         }
     }
 }

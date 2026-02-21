@@ -41,6 +41,7 @@ type PerformanceReport = {
 
 type AppSettings = SettingsDraft;
 type UiLocale = "en" | "zh";
+type InputRouteMode = "undetermined" | "cursor_input" | "clipboard_mode";
 
 type EdgeStateKind = "auth" | "network" | "permission" | "empty" | "generic";
 
@@ -55,7 +56,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   apiKey: "",
   languageCode: "eng",
   hotkey: "Ctrl+N",
-  injectionThreshold: 10,
   partialRewriteEnabled: true,
   partialRewriteMaxBackspace: 12,
   partialRewriteWindowMs: 140,
@@ -114,6 +114,11 @@ const UI_COPY = {
     emptyTitle: "Empty Transcript",
     emptyDetail: "A committed transcript arrived without text content.",
     emptyHint: "Speak clearly and keep recording slightly longer.",
+    inputRouteLabel: "Input Route (Debug)",
+    inputRouteHint: "Shows whether current app is using cursor typing or clipboard mode.",
+    inputRouteUndetermined: "Undetermined",
+    inputRouteCursor: "Cursor Input",
+    inputRouteClipboard: "Clipboard Mode",
   },
   zh: {
     heroTitle: "RAFlow 桌面控制台",
@@ -165,6 +170,11 @@ const UI_COPY = {
     emptyTitle: "空转写",
     emptyDetail: "收到了 committed_transcript，但文本为空。",
     emptyHint: "请更清晰说话并稍微延长录制时间。",
+    inputRouteLabel: "输入分流（调试）",
+    inputRouteHint: "显示当前应用被判定为“有光标输入”或“剪贴板模式”。",
+    inputRouteUndetermined: "待判定",
+    inputRouteCursor: "有光标输入",
+    inputRouteClipboard: "剪贴板模式",
   },
 } as const;
 
@@ -266,6 +276,18 @@ function translateRecordingState(stateLabel: string, locale: UiLocale): string {
   }
 }
 
+function translateInputRoute(route: InputRouteMode, locale: UiLocale): string {
+  const copy = UI_COPY[locale];
+  switch (route) {
+    case "cursor_input":
+      return copy.inputRouteCursor;
+    case "clipboard_mode":
+      return copy.inputRouteClipboard;
+    default:
+      return copy.inputRouteUndetermined;
+  }
+}
+
 function translatePermissionState(state: PermissionState, locale: UiLocale): string {
   const copy = UI_COPY[locale];
   switch (state) {
@@ -287,6 +309,7 @@ function App() {
   const [partialTranscript, setPartialTranscript] = useState<string>("");
   const [committedTranscript, setCommittedTranscript] = useState<string>("");
   const [recordingState, setRecordingState] = useState<string>("Idle");
+  const [inputRoute, setInputRoute] = useState<InputRouteMode>("undetermined");
   const [overlayVisible, setOverlayVisible] = useState<boolean>(true);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [saveMessage, setSaveMessage] = useState<string>("");
@@ -376,6 +399,7 @@ function App() {
   const startRecording = useCallback(async () => {
     try {
       clearTransientError();
+      setInputRoute("undetermined");
       await invoke("start_recording");
     } catch (invokeError) {
       applyRecordingError(String(invokeError));
@@ -430,7 +454,11 @@ function App() {
       }),
       listen<string>("session_started", () => {
         setRecordingState("Listening");
+        setInputRoute("undetermined");
         clearTransientError();
+      }),
+      listen<InputRouteMode>("input_route_changed", (event) => {
+        setInputRoute(event.payload);
       }),
       listen<boolean>("overlay_visibility_changed", (event) => {
         setOverlayVisible(event.payload);
@@ -498,6 +526,11 @@ function App() {
             <strong>{copy.state}:</strong>{" "}
             <span className="state-inline">{translateRecordingState(recordingState, uiLocale)}</span>
           </p>
+          <p>
+            <strong>{copy.inputRouteLabel}:</strong>{" "}
+            <span className="state-inline">{translateInputRoute(inputRoute, uiLocale)}</span>
+          </p>
+          <p className="settings-hint">{copy.inputRouteHint}</p>
         </div>
         {recordingError ? <p className="error">{copy.errorPrefix}: {recordingError}</p> : null}
       </section>
@@ -591,15 +624,6 @@ function App() {
         }}
         onHotkeyChange={(value) => {
           setSettings((current) => ({ ...current, hotkey: value }));
-          setSettingsError("");
-          setSaveMessage("");
-        }}
-        onInjectionThresholdChange={(value) => {
-          if (!Number.isFinite(value)) {
-            return;
-          }
-          const normalized = Math.max(1, Math.min(1024, Math.trunc(value)));
-          setSettings((current) => ({ ...current, injectionThreshold: normalized }));
           setSettingsError("");
           setSaveMessage("");
         }}

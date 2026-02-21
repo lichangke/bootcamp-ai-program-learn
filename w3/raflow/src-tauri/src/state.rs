@@ -7,8 +7,8 @@ use serde::Serialize;
 use tokio::sync::{Mutex, Notify, broadcast};
 
 use crate::input::{
-    DEFAULT_INJECTION_THRESHOLD, DEFAULT_PARTIAL_REWRITE_ENABLED,
-    DEFAULT_PARTIAL_REWRITE_MAX_BACKSPACE, DEFAULT_PARTIAL_REWRITE_WINDOW_MS,
+    DEFAULT_PARTIAL_REWRITE_ENABLED, DEFAULT_PARTIAL_REWRITE_MAX_BACKSPACE,
+    DEFAULT_PARTIAL_REWRITE_WINDOW_MS,
 };
 use crate::metrics::RuntimeMetrics;
 use crate::network::{NetworkEvent, ScribeClient};
@@ -60,7 +60,6 @@ impl LivePartialTracker {
     pub fn reset_after_commit(&mut self) {
         self.injected_text.clear();
         self.disabled_until_commit = false;
-        self.mode = TranscriptInjectionMode::Undetermined;
         self.last_rewrite_at_ms = 0;
     }
 }
@@ -68,7 +67,6 @@ impl LivePartialTracker {
 pub struct RuntimeState {
     pub is_recording: Mutex<bool>,
     pub current_hotkey: Mutex<String>,
-    pub injection_threshold: Mutex<usize>,
     pub partial_rewrite_enabled: Mutex<bool>,
     pub partial_rewrite_max_backspace: Mutex<usize>,
     pub partial_rewrite_window_ms: Mutex<u64>,
@@ -94,7 +92,6 @@ impl AppState {
         let runtime = RuntimeState {
             is_recording: Mutex::new(false),
             current_hotkey: Mutex::new("Ctrl+N".to_string()),
-            injection_threshold: Mutex::new(DEFAULT_INJECTION_THRESHOLD),
             partial_rewrite_enabled: Mutex::new(DEFAULT_PARTIAL_REWRITE_ENABLED),
             partial_rewrite_max_backspace: Mutex::new(DEFAULT_PARTIAL_REWRITE_MAX_BACKSPACE),
             partial_rewrite_window_ms: Mutex::new(DEFAULT_PARTIAL_REWRITE_WINDOW_MS),

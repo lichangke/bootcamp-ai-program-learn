@@ -2,7 +2,6 @@ export type SettingsDraft = {
   apiKey: string;
   languageCode: string;
   hotkey: string;
-  injectionThreshold: number;
   partialRewriteEnabled: boolean;
   partialRewriteMaxBackspace: number;
   partialRewriteWindowMs: number;
@@ -14,7 +13,6 @@ type SettingsPanelProps = {
   onApiKeyChange: (value: string) => void;
   onLanguageChange: (value: string) => void;
   onHotkeyChange: (value: string) => void;
-  onInjectionThresholdChange: (value: number) => void;
   onPartialRewriteEnabledChange: (value: boolean) => void;
   onPartialRewriteMaxBackspaceChange: (value: number) => void;
   onPartialRewriteWindowMsChange: (value: number) => void;
@@ -30,7 +28,6 @@ export function SettingsPanel({
   onApiKeyChange,
   onLanguageChange,
   onHotkeyChange,
-  onInjectionThresholdChange,
   onPartialRewriteEnabledChange,
   onPartialRewriteMaxBackspaceChange,
   onPartialRewriteWindowMsChange,
@@ -70,16 +67,6 @@ export function SettingsPanel({
           onChange={(event) => onHotkeyChange(event.target.value)}
           placeholder="Ctrl+N"
           spellCheck={false}
-        />
-        <label htmlFor="threshold">{zh ? "注入阈值" : "Injection Threshold"}</label>
-        <input
-          id="threshold"
-          value={settings.injectionThreshold}
-          onChange={(event) => onInjectionThresholdChange(Number(event.target.value))}
-          min={1}
-          max={1024}
-          step={1}
-          type="number"
         />
         <label htmlFor="partial-rewrite-enabled">{zh ? "Partial 回改" : "Partial Rewrite"}</label>
         <input
@@ -136,7 +123,7 @@ export function SettingsPanel({
         {zh ? (
           <>
             <p>
-              <strong>注入阈值:</strong> 小于这个字数时，优先逐字输入；达到或超过这个值时，优先走剪贴板粘贴。
+              <strong>输入策略:</strong> 有光标时，无论长度都逐字输入；无光标时，转写结果只写入剪贴板。
             </p>
             <p>
               <strong>回改最大退格数:</strong> 每次实时纠错最多回删多少个字符。值越大，纠错更积极；值越小，更稳但改得少。
@@ -145,15 +132,15 @@ export function SettingsPanel({
               <strong>回改节流窗口 (ms):</strong> 两次回改之间的最小间隔。越小反应越快，越大抖动越少。
             </p>
             <p>
-              <strong>推荐值:</strong> <code>10 / 12 / 140</code> 适合大多数场景；<code>8 / 8 / 180</code>{" "}
-              更稳。
+              <strong>推荐值:</strong> 回改最大退格数/回改节流窗口 = <code>12 / 140</code>{" "}
+              适合大多数场景；<code>8 / 180</code> 更稳。
             </p>
           </>
         ) : (
           <>
             <p>
-              <strong>Injection Threshold:</strong> Below this length, text is typed directly; at or above it,
-              clipboard paste is preferred.
+              <strong>Input Strategy:</strong> With a cursor, text is always typed character-by-character. Without a
+              cursor, transcript is written to clipboard only.
             </p>
             <p>
               <strong>Rewrite Max Backspace:</strong> Maximum characters deleted in one realtime correction.
@@ -164,8 +151,8 @@ export function SettingsPanel({
               larger reduces jitter.
             </p>
             <p>
-              <strong>Recommended:</strong> <code>10 / 12 / 140</code> fits most cases;{" "}
-              <code>8 / 8 / 180</code> is more stable.
+              <strong>Recommended:</strong> Rewrite Max Backspace / Rewrite Window = <code>12 / 140</code>{" "}
+              fits most cases; <code>8 / 180</code> is more stable.
             </p>
           </>
         )}

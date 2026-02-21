@@ -3,7 +3,6 @@ pub mod injector;
 use hanconv::t2s;
 use thiserror::Error;
 
-pub const DEFAULT_INJECTION_THRESHOLD: usize = 10;
 pub const MAX_TRANSCRIPT_LENGTH: usize = 10_000;
 pub const DEFAULT_PARTIAL_REWRITE_ENABLED: bool = true;
 pub const DEFAULT_PARTIAL_REWRITE_MAX_BACKSPACE: usize = 12;
