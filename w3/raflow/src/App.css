@@ -58,6 +58,18 @@
   color: #1a3d73;
 }
 
+.help-btn {
+  margin-left: auto;
+  background: #1f4f88;
+  border-color: #1f4f88;
+  color: #ffffff;
+}
+
+.help-btn:hover {
+  border-color: #163b66;
+  background: #163b66;
+}
+
 .card {
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid #d7e2f0;
@@ -321,6 +333,59 @@ select {
   margin-top: 0.5rem;
 }
 
+.help-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(18, 27, 41, 0.38);
+}
+
+.help-modal {
+  width: min(760px, 96vw);
+  max-height: 84vh;
+  overflow: auto;
+  border-radius: 14px;
+  border: 1px solid #c8d6ea;
+  background: #ffffff;
+  box-shadow: 0 22px 50px rgba(20, 40, 74, 0.28);
+  padding: 1rem;
+}
+
+.help-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.help-modal-head h2 {
+  margin: 0;
+}
+
+.help-intro {
+  margin: 0.55rem 0 0.75rem;
+  color: #42546b;
+}
+
+.help-modal h3 {
+  margin: 0.5rem 0 0.35rem;
+  font-size: 1rem;
+}
+
+.help-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: #2d3c50;
+}
+
+.help-list li {
+  margin: 0.22rem 0;
+}
+
 @media (max-width: 640px) {
   .app-shell {
     padding: 1.2rem 0.8rem 2rem;
@@ -340,5 +405,14 @@ select {
 
   .perf-grid {
     grid-template-columns: 1fr;
+  }
+
+  .help-btn {
+    margin-left: 0;
+  }
+
+  .help-modal {
+    max-height: 88vh;
+    padding: 0.85rem;
   }
 }

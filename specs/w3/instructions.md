@@ -80,7 +80,7 @@ nnnoiseless   https://github.com/jneem/nnnoiseless
 
 ## 界面新增 中英文 切换
 
-## 注入阈值
+## 注入阈值删除
 
 规则改成：
 

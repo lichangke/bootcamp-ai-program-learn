@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 export type SettingsDraft = {
   apiKey: string;
   languageCode: string;
@@ -37,6 +39,70 @@ export function SettingsPanel({
   saveError,
 }: SettingsPanelProps) {
   const zh = uiLocale === "zh";
+  const [maxBackspaceInput, setMaxBackspaceInput] = useState<string>(
+    () => String(settings.partialRewriteMaxBackspace),
+  );
+  const [windowMsInput, setWindowMsInput] = useState<string>(
+    () => String(settings.partialRewriteWindowMs),
+  );
+
+  useEffect(() => {
+    setMaxBackspaceInput(String(settings.partialRewriteMaxBackspace));
+  }, [settings.partialRewriteMaxBackspace]);
+
+  useEffect(() => {
+    setWindowMsInput(String(settings.partialRewriteWindowMs));
+  }, [settings.partialRewriteWindowMs]);
+
+  const handleMaxBackspaceChange = (raw: string) => {
+    setMaxBackspaceInput(raw);
+    if (raw.trim() === "") {
+      return;
+    }
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) {
+      onPartialRewriteMaxBackspaceChange(parsed);
+    }
+  };
+
+  const commitMaxBackspaceInput = () => {
+    const trimmed = maxBackspaceInput.trim();
+    if (trimmed === "") {
+      setMaxBackspaceInput(String(settings.partialRewriteMaxBackspace));
+      return;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) {
+      setMaxBackspaceInput(String(settings.partialRewriteMaxBackspace));
+      return;
+    }
+    onPartialRewriteMaxBackspaceChange(parsed);
+  };
+
+  const handleWindowMsChange = (raw: string) => {
+    setWindowMsInput(raw);
+    if (raw.trim() === "") {
+      return;
+    }
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) {
+      onPartialRewriteWindowMsChange(parsed);
+    }
+  };
+
+  const commitWindowMsInput = () => {
+    const trimmed = windowMsInput.trim();
+    if (trimmed === "") {
+      setWindowMsInput(String(settings.partialRewriteWindowMs));
+      return;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) {
+      setWindowMsInput(String(settings.partialRewriteWindowMs));
+      return;
+    }
+    onPartialRewriteWindowMsChange(parsed);
+  };
 
   return (
     <section className="card">
@@ -80,8 +146,9 @@ export function SettingsPanel({
         </label>
         <input
           id="partial-rewrite-backspace"
-          value={settings.partialRewriteMaxBackspace}
-          onChange={(event) => onPartialRewriteMaxBackspaceChange(Number(event.target.value))}
+          value={maxBackspaceInput}
+          onChange={(event) => handleMaxBackspaceChange(event.target.value)}
+          onBlur={commitMaxBackspaceInput}
           min={0}
           max={64}
           step={1}
@@ -92,8 +159,9 @@ export function SettingsPanel({
         </label>
         <input
           id="partial-rewrite-window"
-          value={settings.partialRewriteWindowMs}
-          onChange={(event) => onPartialRewriteWindowMsChange(Number(event.target.value))}
+          value={windowMsInput}
+          onChange={(event) => handleWindowMsChange(event.target.value)}
+          onBlur={commitWindowMsInput}
           min={0}
           max={2000}
           step={10}

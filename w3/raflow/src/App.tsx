@@ -119,6 +119,28 @@ const UI_COPY = {
     inputRouteUndetermined: "Undetermined",
     inputRouteCursor: "Cursor Input",
     inputRouteClipboard: "Clipboard Mode",
+    helpButton: "Help",
+    helpClose: "Close",
+    helpTitle: "Help Center",
+    helpIntro:
+      "RAFlow converts speech to text in realtime and automatically routes output by cursor availability.",
+    helpFeatureTitle: "Core Features",
+    helpFeatures: [
+      "Use a global hotkey to start and stop recording quickly.",
+      "With a cursor: type partial transcript in realtime, then committed stage only supplements punctuation.",
+      "Without a cursor: do not type into app, append committed transcript to clipboard only.",
+      "Overlay Preview shows Partial and Committed transcript in parallel.",
+      "Runtime panel shows state, errors, performance metrics, and current input-route debug status.",
+    ],
+    helpHowToTitle: "How To Use",
+    helpSteps: [
+      "Open Settings, save API key, recognition language (English/Simplified Chinese), and hotkey.",
+      "Click Start or press hotkey to begin recording, then speak clearly.",
+      "If the target app has a text cursor, transcript is typed in realtime.",
+      "If there is no text cursor, new committed transcript is appended to clipboard buffer.",
+      "Click Stop + Flush to end recording and refresh runtime metrics.",
+      "When errors occur, check state/error message first, then verify network and system permissions.",
+    ],
   },
   zh: {
     heroTitle: "RAFlow 桌面控制台",
@@ -175,6 +197,27 @@ const UI_COPY = {
     inputRouteUndetermined: "待判定",
     inputRouteCursor: "有光标输入",
     inputRouteClipboard: "剪贴板模式",
+    helpButton: "帮助",
+    helpClose: "关闭",
+    helpTitle: "帮助中心",
+    helpIntro: "RAFlow 会将语音实时转写为文本，并根据当前应用是否有输入光标自动分流输出方式。",
+    helpFeatureTitle: "核心功能",
+    helpFeatures: [
+      "支持全局热键快速开始/停止录制。",
+      "有光标时：实时输入 partial，committed 阶段仅补标点。",
+      "无光标时：不向当前应用打字，仅把 committed 文本追加到剪贴板。",
+      "Overlay Preview 会并行显示 Partial 和 Committed 文本。",
+      "运行面板可查看状态、错误、性能指标和输入分流调试状态。",
+    ],
+    helpHowToTitle: "操作方式",
+    helpSteps: [
+      "先在设置中保存 API Key、识别语言（英文/简体中文）和热键。",
+      "点击“开始”或按热键开始录制，然后正常说话。",
+      "当目标应用有输入光标时，会实时逐字输入转写内容。",
+      "当目标应用无输入光标时，新 committed 文本会追加到剪贴板缓存。",
+      "点击“停止并刷新”结束录制并刷新运行指标。",
+      "出现错误时先看运行状态和报错，再检查网络与系统权限。",
+    ],
   },
 } as const;
 
@@ -314,6 +357,7 @@ function App() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [saveMessage, setSaveMessage] = useState<string>("");
   const [isSavingSettings, setIsSavingSettings] = useState<boolean>(false);
+  const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
   const [permissions, setPermissions] = useState<PermissionReport | null>(null);
   const [performance, setPerformance] = useState<PerformanceReport | null>(null);
   const copy = UI_COPY[uiLocale];
@@ -430,6 +474,23 @@ function App() {
   }, [uiLocale]);
 
   useEffect(() => {
+    if (!isHelpOpen) {
+      return;
+    }
+
+    const onKeydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsHelpOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeydown);
+    return () => {
+      window.removeEventListener("keydown", onKeydown);
+    };
+  }, [isHelpOpen]);
+
+  useEffect(() => {
     const listeners = [
       listen<string>("partial_transcript", (event) => {
         setPartialTranscript(event.payload);
@@ -492,6 +553,9 @@ function App() {
             onClick={() => setUiLocale("en")}
           >
             {copy.uiLanguageEn}
+          </button>
+          <button type="button" className="help-btn" onClick={() => setIsHelpOpen(true)}>
+            {copy.helpButton}
           </button>
         </div>
       </header>
@@ -655,6 +719,42 @@ function App() {
         saveMessage={saveMessage}
         saveError={settingsError}
       />
+
+      {isHelpOpen ? (
+        <div
+          className="help-modal-backdrop"
+          onClick={() => setIsHelpOpen(false)}
+          role="presentation"
+        >
+          <section
+            className="help-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={copy.helpTitle}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="help-modal-head">
+              <h2>{copy.helpTitle}</h2>
+              <button type="button" onClick={() => setIsHelpOpen(false)}>
+                {copy.helpClose}
+              </button>
+            </div>
+            <p className="help-intro">{copy.helpIntro}</p>
+            <h3>{copy.helpFeatureTitle}</h3>
+            <ul className="help-list">
+              {copy.helpFeatures.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+            <h3>{copy.helpHowToTitle}</h3>
+            <ol className="help-list">
+              {copy.helpSteps.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ol>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
