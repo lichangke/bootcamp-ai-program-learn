@@ -288,7 +288,7 @@ fn interleaved_u16_to_mono(data: &[u16], input_channels: usize) -> Vec<f32> {
 
 fn mark_dropped(counter: &AtomicUsize) {
     let total = counter.fetch_add(1, Ordering::Relaxed) + 1;
-    if total % 100 == 0 {
+    if total.is_multiple_of(100) {
         warn!(
             dropped_chunks = total,
             "audio chunks dropped due to ring buffer pressure"

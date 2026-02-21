@@ -54,55 +54,62 @@ export function SettingsPanel({
     setWindowMsInput(String(settings.partialRewriteWindowMs));
   }, [settings.partialRewriteWindowMs]);
 
-  const handleMaxBackspaceChange = (raw: string) => {
-    setMaxBackspaceInput(raw);
+  const createNumberInputHandler = (
+    setInput: (value: string) => void,
+    onChange: (value: number) => void,
+  ) => (raw: string) => {
+    setInput(raw);
     if (raw.trim() === "") {
       return;
     }
     const parsed = Number(raw);
     if (Number.isFinite(parsed)) {
-      onPartialRewriteMaxBackspaceChange(parsed);
+      onChange(parsed);
     }
   };
 
-  const commitMaxBackspaceInput = () => {
-    const trimmed = maxBackspaceInput.trim();
+  const createNumberInputCommit = (
+    input: string,
+    setInput: (value: string) => void,
+    fallbackValue: number,
+    onChange: (value: number) => void,
+  ) => () => {
+    const trimmed = input.trim();
     if (trimmed === "") {
-      setMaxBackspaceInput(String(settings.partialRewriteMaxBackspace));
+      setInput(String(fallbackValue));
       return;
     }
     const parsed = Number(trimmed);
     if (!Number.isFinite(parsed)) {
-      setMaxBackspaceInput(String(settings.partialRewriteMaxBackspace));
+      setInput(String(fallbackValue));
       return;
     }
-    onPartialRewriteMaxBackspaceChange(parsed);
+    onChange(parsed);
   };
 
-  const handleWindowMsChange = (raw: string) => {
-    setWindowMsInput(raw);
-    if (raw.trim() === "") {
-      return;
-    }
-    const parsed = Number(raw);
-    if (Number.isFinite(parsed)) {
-      onPartialRewriteWindowMsChange(parsed);
-    }
-  };
+  const handleMaxBackspaceChange = createNumberInputHandler(
+    setMaxBackspaceInput,
+    onPartialRewriteMaxBackspaceChange,
+  );
 
-  const commitWindowMsInput = () => {
-    const trimmed = windowMsInput.trim();
-    if (trimmed === "") {
-      setWindowMsInput(String(settings.partialRewriteWindowMs));
-      return;
-    }
-    const parsed = Number(trimmed);
-    if (!Number.isFinite(parsed)) {
-      setWindowMsInput(String(settings.partialRewriteWindowMs));
-      return;
-    }
-    onPartialRewriteWindowMsChange(parsed);
-  };
+  const commitMaxBackspaceInput = createNumberInputCommit(
+    maxBackspaceInput,
+    setMaxBackspaceInput,
+    settings.partialRewriteMaxBackspace,
+    onPartialRewriteMaxBackspaceChange,
+  );
+
+  const handleWindowMsChange = createNumberInputHandler(
+    setWindowMsInput,
+    onPartialRewriteWindowMsChange,
+  );
+
+  const commitWindowMsInput = createNumberInputCommit(
+    windowMsInput,
+    setWindowMsInput,
+    settings.partialRewriteWindowMs,
+    onPartialRewriteWindowMsChange,
+  );
 
   return (
     <section className="card">

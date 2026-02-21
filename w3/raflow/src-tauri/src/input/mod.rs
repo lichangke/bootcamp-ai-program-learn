@@ -3,6 +3,8 @@ pub mod injector;
 use hanconv::t2s;
 use thiserror::Error;
 
+use crate::utils::contains_cjk;
+
 pub const MAX_TRANSCRIPT_LENGTH: usize = 10_000;
 pub const DEFAULT_PARTIAL_REWRITE_ENABLED: bool = true;
 pub const DEFAULT_PARTIAL_REWRITE_MAX_BACKSPACE: usize = 12;
@@ -87,15 +89,14 @@ pub fn resolve_committed_punctuation_delta(committed_text: &str, injected_text: 
         return String::new();
     }
 
-    if let Some(delta) = committed.strip_prefix(injected) {
-        if delta
+    if let Some(delta) = committed.strip_prefix(injected)
+        && delta
             .trim()
             .chars()
             .all(|ch| is_terminal_punctuation(ch) || is_closing_punctuation_wrapper(ch))
         {
             return delta.to_string();
         }
-    }
 
     if has_terminal_punctuation(injected) {
         return String::new();
@@ -152,25 +153,6 @@ fn extract_terminal_punctuation_suffix(text: &str) -> String {
 
     let start = chars[index].0;
     trimmed_end[start..].to_string()
-}
-
-fn contains_cjk(text: &str) -> bool {
-    text.chars().any(is_cjk)
-}
-
-fn is_cjk(ch: char) -> bool {
-    matches!(
-        ch as u32,
-        0x3400..=0x4DBF
-            | 0x4E00..=0x9FFF
-            | 0xF900..=0xFAFF
-            | 0x20000..=0x2A6DF
-            | 0x2A700..=0x2B73F
-            | 0x2B740..=0x2B81F
-            | 0x2B820..=0x2CEAF
-            | 0x2CEB0..=0x2EBEF
-            | 0x3000..=0x303F
-    )
 }
 
 #[cfg(test)]

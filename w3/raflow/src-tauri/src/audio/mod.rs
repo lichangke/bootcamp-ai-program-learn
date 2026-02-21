@@ -114,7 +114,7 @@ pub async fn audio_processing_task(
                         Ok(()) => {}
                         Err(TrySendError::Full(_)) => {
                             let dropped = dropped_counter.fetch_add(1, Ordering::Relaxed) + 1;
-                            if dropped % BACKPRESSURE_WARN_EVERY == 0 {
+                            if dropped.is_multiple_of(BACKPRESSURE_WARN_EVERY) {
                                 warn!(
                                     dropped_audio_chunks = dropped,
                                     "dropping processed chunks because sender is saturated"

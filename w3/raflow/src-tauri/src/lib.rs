@@ -7,11 +7,12 @@ pub mod network;
 mod permissions;
 mod secure_storage;
 mod state;
+mod utils;
 
 use std::error::Error;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 
 use error::AppError;
 use input::{
@@ -26,6 +27,7 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{Manager, RunEvent, WindowEvent};
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
+use utils::{is_cjk, is_join_boundary_punctuation, now_epoch_ms};
 
 const MAIN_WINDOW_LABEL: &str = "main";
 const MENU_ID_OPEN_SETTINGS: &str = "open_settings";
@@ -201,11 +203,10 @@ fn setup_app(app: &mut tauri::App) -> SetupResult<()> {
     spawn_injection_dispatcher(app.handle().clone(), Arc::clone(&runtime));
     app.manage(app_state);
 
-    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-        if let Err(err) = window.set_icon(tauri::include_image!("./icons/icon.png")) {
+    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL)
+        && let Err(err) = window.set_icon(tauri::include_image!("./icons/icon.png")) {
             warn!("failed to set main window icon: {err}");
         }
-    }
 
     setup_tray(app)?;
     setup_global_shortcut(app)?;
@@ -614,27 +615,6 @@ fn append_to_pending_clipboard(pending: &mut String, new_text: &str) -> String {
     pending.clone()
 }
 
-fn is_join_boundary_punctuation(ch: char) -> bool {
-    matches!(
-        ch,
-        '.' | ',' | '!' | '?' | ';' | ':' | '，' | '。' | '！' | '？' | '；' | '：' | '、'
-    )
-}
-
-fn is_cjk(ch: char) -> bool {
-    matches!(
-        ch as u32,
-        0x3400..=0x4DBF
-            | 0x4E00..=0x9FFF
-            | 0xF900..=0xFAFF
-            | 0x20000..=0x2A6DF
-            | 0x2A700..=0x2B73F
-            | 0x2B740..=0x2B81F
-            | 0x2B820..=0x2CEAF
-            | 0x2CEB0..=0x2EBEF
-            | 0x3000..=0x303F
-    )
-}
 
 #[cfg(target_os = "windows")]
 fn is_text_cursor_available() -> bool {
@@ -866,12 +846,6 @@ fn suffix_from_char_index(text: &str, char_index: usize) -> String {
     }
 }
 
-fn now_epoch_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or(0)
-}
 
 fn should_drop_low_confidence_committed(confidence: f32) -> bool {
     // ElevenLabs can emit committed_transcript with confidence=0.0 as "unknown".

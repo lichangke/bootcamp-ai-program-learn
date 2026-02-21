@@ -219,7 +219,7 @@ impl ScribeClient {
 
                 if let Some(connection) = pool.connection.as_mut() {
                     let mut writer = connection.writer.lock().await;
-                    writer.send(Message::Text(message.clone().into())).await
+                    writer.send(Message::Text(message.clone())).await
                 } else {
                     unreachable!("connection must exist after ensure_connection")
                 }
@@ -403,11 +403,10 @@ impl ScribeClient {
             pool.connection.take()
         };
 
-        if let Some(connection) = maybe_connection {
-            if let Err(err) = connection.shutdown().await {
+        if let Some(connection) = maybe_connection
+            && let Err(err) = connection.shutdown().await {
                 warn!("failed to shutdown websocket connection: {err}");
             }
-        }
 
         Ok(())
     }

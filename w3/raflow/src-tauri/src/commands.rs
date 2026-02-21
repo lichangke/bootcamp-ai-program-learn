@@ -2,7 +2,7 @@ use std::fs;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -22,6 +22,7 @@ use crate::network::ScribeClient;
 use crate::permissions::PermissionReport;
 use crate::secure_storage;
 use crate::state::{AppState, ClientBinding, CommittedTranscript, RecordingSession, RuntimeState};
+use crate::utils::now_epoch_ms;
 
 const RECORDING_ERROR_EVENT: &str = "recording_error";
 const RECORDING_STATE_EVENT: &str = "recording_state";
@@ -262,11 +263,10 @@ pub fn load_settings(app_handle: &AppHandle) -> Result<AppSettings, String> {
         }
     }
 
-    if settings.api_key.trim().is_empty() {
-        if let Some(env_api_key) = read_api_key_from_environment() {
+    if settings.api_key.trim().is_empty()
+        && let Some(env_api_key) = read_api_key_from_environment() {
             settings.api_key = env_api_key;
         }
-    }
 
     Ok(settings)
 }
@@ -568,7 +568,7 @@ fn run_recording_worker(
                             silent_streak += 1;
                             if silent_streak > SILENCE_CHUNK_GRACE {
                                 suppressed_silence_chunks += 1;
-                                if suppressed_silence_chunks % SILENCE_SUPPRESS_LOG_EVERY == 0 {
+                                if suppressed_silence_chunks.is_multiple_of(SILENCE_SUPPRESS_LOG_EVERY) {
                                     info!(
                                         suppressed_silence_chunks,
                                         "suppressing sustained silence chunks before network send"
@@ -731,12 +731,6 @@ fn max_abs_sample(samples: &[i16]) -> i16 {
     max
 }
 
-fn now_epoch_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or(0)
-}
 
 async fn get_or_create_client(
     runtime: &RuntimeState,
@@ -745,11 +739,10 @@ async fn get_or_create_client(
 ) -> Arc<ScribeClient> {
     let mut binding = runtime.client_binding.lock().await;
 
-    if let Some(existing) = binding.as_ref() {
-        if existing.api_key == api_key && existing.language_code == language_code {
+    if let Some(existing) = binding.as_ref()
+        && existing.api_key == api_key && existing.language_code == language_code {
             return Arc::clone(&existing.client);
         }
-    }
 
     if let Some(old_binding) = binding.take() {
         let old_client = Arc::clone(&old_binding.client);
@@ -957,21 +950,18 @@ fn apply_hotkey_change(
 
     let manager = app_handle.global_shortcut();
 
-    if let Ok(previous_shortcut) = parse_shortcut(previous_hotkey) {
-        if manager.is_registered(previous_shortcut) {
-            if let Err(err) = manager.unregister(previous_shortcut) {
+    if let Ok(previous_shortcut) = parse_shortcut(previous_hotkey)
+        && manager.is_registered(previous_shortcut)
+            && let Err(err) = manager.unregister(previous_shortcut) {
                 warn!("failed to unregister old hotkey `{previous_hotkey}`: {err}");
             }
-        }
-    }
 
     let next_shortcut = parse_shortcut(next_hotkey)?;
     if let Err(err) = manager.register(next_shortcut) {
-        if let Ok(previous_shortcut) = parse_shortcut(previous_hotkey) {
-            if let Err(restore_err) = manager.register(previous_shortcut) {
+        if let Ok(previous_shortcut) = parse_shortcut(previous_hotkey)
+            && let Err(restore_err) = manager.register(previous_shortcut) {
                 warn!("failed to restore old hotkey `{previous_hotkey}`: {restore_err}");
             }
-        }
         return Err(format!("failed to register hotkey `{next_hotkey}`: {err}"));
     }
 

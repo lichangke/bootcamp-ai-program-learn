@@ -1,7 +1,8 @@
 use std::collections::VecDeque;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
+
+use crate::utils::now_epoch_ms;
 
 const DEFAULT_WINDOW_SIZE: usize = 256;
 const E2E_P95_TARGET_MS: u64 = 500;
@@ -185,11 +186,4 @@ impl Default for RuntimeMetrics {
     fn default() -> Self {
         Self::new()
     }
-}
-
-fn now_epoch_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or(0)
 }

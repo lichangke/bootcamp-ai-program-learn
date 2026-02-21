@@ -52,7 +52,7 @@ impl AudioResampler {
         if input.is_empty() {
             return Ok(Vec::new());
         }
-        if input.len() % self.channels != 0 {
+        if !input.len().is_multiple_of(self.channels) {
             return Err(AudioError::InvalidInput(
                 "input sample count must match channel layout".to_string(),
             ));
