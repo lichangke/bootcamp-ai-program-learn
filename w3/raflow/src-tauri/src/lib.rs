@@ -14,9 +14,12 @@ use std::sync::atomic::Ordering;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use error::AppError;
-use input::{append_terminal_punctuation, injector::InputInjector};
+use input::{
+    append_terminal_punctuation, injector::InputInjector, normalize_transcript_text,
+    resolve_committed_punctuation_delta,
+};
 use network::{NetworkEvent, ScribeEvent};
-use state::{AppState, CommittedTranscript, RuntimeState};
+use state::{AppState, CommittedTranscript, RuntimeState, TranscriptInjectionMode};
 use tauri::Emitter;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -37,6 +40,7 @@ const EVENT_OVERLAY_VISIBILITY_CHANGED: &str = "overlay_visibility_changed";
 const FALLBACK_HOTKEY: &str = "Ctrl+N";
 const MIN_COMMITTED_CONFIDENCE: f32 = 0.10;
 const MAX_COMMIT_INACTIVE_MS: u64 = 6_000;
+const MAX_PARTIAL_INACTIVE_MS: u64 = 2_000;
 
 type SetupResult<T> = Result<T, Box<dyn Error>>;
 
@@ -271,7 +275,17 @@ async fn handle_scribe_event(
             emit_string_event(app_handle, EVENT_SESSION_STARTED, &session_id);
         }
         ScribeEvent::PartialTranscript { text, .. } => {
-            emit_string_event(app_handle, EVENT_PARTIAL_TRANSCRIPT, &text);
+            let language_code = current_language_code(runtime).await;
+            let normalized_text = normalize_transcript_text(&text, &language_code);
+            emit_string_event(app_handle, EVENT_PARTIAL_TRANSCRIPT, &normalized_text);
+
+            if !is_text_cursor_available() {
+                let mut tracker = runtime.live_partial_tracker.lock().await;
+                tracker.mode = TranscriptInjectionMode::ClipboardOnly;
+                return;
+            }
+
+            inject_partial_transcript_delta(app_handle, runtime, &normalized_text).await;
         }
         ScribeEvent::CommittedTranscript {
             text,
@@ -305,19 +319,52 @@ async fn handle_scribe_event(
                 return;
             }
 
-            let committed_text = append_terminal_punctuation(&text);
+            let language_code = current_language_code(runtime).await;
+            let normalized_text = normalize_transcript_text(&text, &language_code);
+            let committed_text = append_terminal_punctuation(&normalized_text);
             if committed_text.trim().is_empty() {
                 return;
             }
 
+            let (text_for_injection, pending_clipboard_text) = {
+                let mut tracker = runtime.live_partial_tracker.lock().await;
+                if !tracker.injected_text.trim().is_empty() {
+                    let punctuation_only = resolve_committed_punctuation_delta(
+                        &committed_text,
+                        &tracker.injected_text,
+                    );
+                    tracker.reset_after_commit();
+                    (punctuation_only, None)
+                } else {
+                    let pending_clipboard_text = append_to_pending_clipboard(
+                        &mut tracker.pending_clipboard_text,
+                        &committed_text,
+                    );
+                    tracker.reset_after_commit();
+                    (String::new(), Some(pending_clipboard_text))
+                }
+            };
+
+            if let Some(pending_text) = pending_clipboard_text {
+                if let Err(err) = InputInjector::write_clipboard_only(&pending_text, app_handle) {
+                    warn!("failed to update clipboard-only transcript buffer: {err}");
+                    emit_string_event(app_handle, EVENT_RECORDING_STATE, "Error");
+                    emit_string_event(app_handle, EVENT_RECORDING_ERROR, &err.to_string());
+                } else {
+                    info!("committed transcript appended to clipboard-only buffer");
+                }
+            }
+
             let mut dropped = 0_u64;
-            {
+            let mut queued_for_injection = false;
+            if !text_for_injection.trim().is_empty() {
                 let mut queue = runtime.committed_queue.lock().await;
                 queue.push_back(CommittedTranscript {
-                    text: committed_text.clone(),
+                    text: text_for_injection,
                     confidence,
                     created_at_ms,
                 });
+                queued_for_injection = true;
                 if queue.len() > 128 {
                     queue.pop_front();
                     dropped = 1;
@@ -327,7 +374,9 @@ async fn handle_scribe_event(
                 let mut metrics = runtime.metrics.lock().await;
                 metrics.record_committed_drop(dropped);
             }
-            runtime.injection_notify.notify_one();
+            if queued_for_injection {
+                runtime.injection_notify.notify_one();
+            }
             emit_string_event(app_handle, EVENT_COMMITTED_TRANSCRIPT, &committed_text);
         }
         ScribeEvent::InputError { error_message } => {
@@ -480,6 +529,186 @@ fn emit_bool_event(app_handle: &tauri::AppHandle, event_name: &str, value: bool)
     }
 }
 
+async fn current_language_code(runtime: &Arc<RuntimeState>) -> String {
+    let binding = runtime.client_binding.lock().await;
+    binding
+        .as_ref()
+        .map(|client| client.language_code.clone())
+        .unwrap_or_else(|| "eng".to_string())
+}
+
+fn append_to_pending_clipboard(pending: &mut String, new_text: &str) -> String {
+    let segment = new_text.trim();
+    if segment.is_empty() {
+        return pending.clone();
+    }
+
+    if !pending.is_empty() {
+        let previous = pending.chars().rev().find(|ch| !ch.is_whitespace());
+        let upcoming = segment.chars().find(|ch| !ch.is_whitespace());
+        if let (Some(previous), Some(upcoming)) = (previous, upcoming) {
+            let needs_separator = !is_join_boundary_punctuation(previous)
+                && !is_join_boundary_punctuation(upcoming)
+                && !is_cjk(previous)
+                && !is_cjk(upcoming);
+            if needs_separator {
+                pending.push(' ');
+            }
+        }
+    }
+
+    pending.push_str(segment);
+    pending.clone()
+}
+
+fn is_join_boundary_punctuation(ch: char) -> bool {
+    matches!(
+        ch,
+        '.' | ',' | '!' | '?' | ';' | ':' | '，' | '。' | '！' | '？' | '；' | '：' | '、'
+    )
+}
+
+fn is_cjk(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x3400..=0x4DBF
+            | 0x4E00..=0x9FFF
+            | 0xF900..=0xFAFF
+            | 0x20000..=0x2A6DF
+            | 0x2A700..=0x2B73F
+            | 0x2B740..=0x2B81F
+            | 0x2B820..=0x2CEAF
+            | 0x2CEB0..=0x2EBEF
+            | 0x3000..=0x303F
+    )
+}
+
+#[cfg(target_os = "windows")]
+fn is_text_cursor_available() -> bool {
+    use std::mem::{size_of, zeroed};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GUITHREADINFO, GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId,
+    };
+
+    unsafe {
+        let foreground_window = GetForegroundWindow();
+        if foreground_window.is_null() {
+            return false;
+        }
+
+        let thread_id = GetWindowThreadProcessId(foreground_window, std::ptr::null_mut());
+        if thread_id == 0 {
+            return false;
+        }
+
+        let mut info: GUITHREADINFO = zeroed();
+        info.cbSize = size_of::<GUITHREADINFO>() as u32;
+
+        if GetGUIThreadInfo(thread_id, &mut info) == 0 {
+            return false;
+        }
+
+        !info.hwndCaret.is_null()
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn is_text_cursor_available() -> bool {
+    true
+}
+
+async fn inject_partial_transcript_delta(
+    app_handle: &tauri::AppHandle,
+    runtime: &Arc<RuntimeState>,
+    partial_text: &str,
+) {
+    let normalized = partial_text.trim();
+    if normalized.is_empty() {
+        return;
+    }
+
+    let now_ms = now_epoch_ms();
+    let last_voice_activity_ms = runtime.last_voice_activity_ms.load(Ordering::Relaxed);
+    if last_voice_activity_ms == 0
+        || now_ms.saturating_sub(last_voice_activity_ms) > MAX_PARTIAL_INACTIVE_MS
+    {
+        return;
+    }
+
+    let injection_plan = {
+        let mut tracker = runtime.live_partial_tracker.lock().await;
+        if matches!(tracker.mode, TranscriptInjectionMode::ClipboardOnly) {
+            None
+        } else if tracker.disabled_until_commit {
+            None
+        } else if tracker.injected_text.is_empty() {
+            Some((normalized.to_string(), normalized.to_string()))
+        } else if let Some(delta) = normalized.strip_prefix(tracker.injected_text.as_str()) {
+            if delta.is_empty() {
+                None
+            } else {
+                Some((delta.to_string(), normalized.to_string()))
+            }
+        } else {
+            // Model revised previous words; avoid uncontrolled duplicates and
+            // wait for committed transcript to recover a stable final text.
+            tracker.disabled_until_commit = true;
+            info!("disabled live partial injection due to transcript revision");
+            None
+        }
+    };
+
+    let Some((delta, next_injected_text)) = injection_plan else {
+        return;
+    };
+
+    let threshold = {
+        let threshold = runtime.injection_threshold.lock().await;
+        *threshold
+    };
+    let inject_started = Instant::now();
+    let inject_result = {
+        let app_handle = app_handle.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let mut injector = InputInjector::new(threshold)?;
+            injector.inject_text(&delta, &app_handle)
+        })
+        .await
+    };
+
+    let injection_ms = inject_started.elapsed().as_millis() as u64;
+    {
+        let mut metrics = runtime.metrics.lock().await;
+        metrics.record_injection(injection_ms);
+    }
+
+    match inject_result {
+        Ok(Ok(())) => {
+            let mut tracker = runtime.live_partial_tracker.lock().await;
+            if !tracker.disabled_until_commit {
+                tracker.injected_text = next_injected_text;
+                tracker.mode = TranscriptInjectionMode::RealtimeCursor;
+            }
+        }
+        Ok(Err(err)) => {
+            warn!("failed to inject partial transcript delta: {err}");
+            let mut tracker = runtime.live_partial_tracker.lock().await;
+            tracker.disabled_until_commit = true;
+            if matches!(tracker.mode, TranscriptInjectionMode::Undetermined) {
+                tracker.mode = TranscriptInjectionMode::ClipboardOnly;
+            }
+        }
+        Err(err) => {
+            warn!("failed to run partial injection task: {err}");
+            let mut tracker = runtime.live_partial_tracker.lock().await;
+            tracker.disabled_until_commit = true;
+            if matches!(tracker.mode, TranscriptInjectionMode::Undetermined) {
+                tracker.mode = TranscriptInjectionMode::ClipboardOnly;
+            }
+        }
+    }
+}
+
 fn now_epoch_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -540,7 +769,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::should_drop_low_confidence_committed;
+    use super::{append_to_pending_clipboard, should_drop_low_confidence_committed};
 
     #[test]
     fn confidence_zero_is_not_dropped() {
@@ -550,5 +779,33 @@ mod tests {
     #[test]
     fn positive_low_confidence_is_dropped() {
         assert!(should_drop_low_confidence_committed(0.01));
+    }
+
+    #[test]
+    fn clipboard_pending_buffer_appends_without_overwrite() {
+        let mut pending = String::new();
+        assert_eq!(
+            append_to_pending_clipboard(&mut pending, "hello world"),
+            "hello world"
+        );
+        assert_eq!(
+            append_to_pending_clipboard(&mut pending, "new chunk"),
+            "hello world new chunk"
+        );
+    }
+
+    #[test]
+    fn clipboard_pending_buffer_keeps_chinese_contiguous() {
+        let mut pending = "你好".to_string();
+        assert_eq!(
+            append_to_pending_clipboard(&mut pending, "世界"),
+            "你好世界"
+        );
+    }
+
+    #[test]
+    fn clipboard_pending_buffer_ignores_empty_segment() {
+        let mut pending = "existing".to_string();
+        assert_eq!(append_to_pending_clipboard(&mut pending, "   "), "existing");
     }
 }

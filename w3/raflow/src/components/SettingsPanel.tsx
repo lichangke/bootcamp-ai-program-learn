@@ -48,7 +48,7 @@ export function SettingsPanel({
           onChange={(event) => onLanguageChange(event.target.value)}
         >
           <option value="eng">English (eng)</option>
-          <option value="zho">Chinese (zho)</option>
+          <option value="zho">Simplified Chinese (zho)</option>
         </select>
         <label htmlFor="hotkey">Global Hotkey</label>
         <input
@@ -75,7 +75,7 @@ export function SettingsPanel({
         </button>
       </div>
       <p className="settings-hint">
-        Language supports English and Chinese. Hotkey examples: <code>Ctrl+N</code>,{" "}
+        Language supports English and Simplified Chinese. Hotkey examples: <code>Ctrl+N</code>,{" "}
         <code>Shift+Alt+R</code>, <code>Cmd+Shift+N</code>.
       </p>
       {saveError ? <p className="error">Error: {saveError}</p> : null}

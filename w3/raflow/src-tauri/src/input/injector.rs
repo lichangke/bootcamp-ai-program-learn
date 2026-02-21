@@ -52,6 +52,21 @@ impl InputInjector {
         Ok(())
     }
 
+    pub fn write_clipboard_only<R: Runtime>(
+        text: &str,
+        app_handle: &AppHandle<R>,
+    ) -> Result<(), InputError> {
+        let cleaned = validate_transcript(text)?;
+        if cleaned.trim().is_empty() {
+            return Ok(());
+        }
+
+        app_handle
+            .clipboard()
+            .write_text(&cleaned)
+            .map_err(|err| InputError::Clipboard(err.to_string()))
+    }
+
     fn inject_via_keyboard(&mut self, text: &str) -> Result<(), InputError> {
         for ch in text.chars() {
             self.enigo

@@ -29,6 +29,36 @@ pub struct ClientBinding {
     pub client: Arc<ScribeClient>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TranscriptInjectionMode {
+    #[default]
+    Undetermined,
+    RealtimeCursor,
+    ClipboardOnly,
+}
+
+#[derive(Default)]
+pub struct LivePartialTracker {
+    pub injected_text: String,
+    pub disabled_until_commit: bool,
+    pub mode: TranscriptInjectionMode,
+    pub pending_clipboard_text: String,
+}
+
+impl LivePartialTracker {
+    pub fn reset_for_session(&mut self) {
+        self.injected_text.clear();
+        self.disabled_until_commit = false;
+        self.mode = TranscriptInjectionMode::Undetermined;
+    }
+
+    pub fn reset_after_commit(&mut self) {
+        self.injected_text.clear();
+        self.disabled_until_commit = false;
+        self.mode = TranscriptInjectionMode::Undetermined;
+    }
+}
+
 pub struct RuntimeState {
     pub is_recording: Mutex<bool>,
     pub current_hotkey: Mutex<String>,
@@ -36,6 +66,7 @@ pub struct RuntimeState {
     pub overlay_visible: Mutex<bool>,
     pub session: Mutex<Option<RecordingSession>>,
     pub client_binding: Mutex<Option<ClientBinding>>,
+    pub live_partial_tracker: Mutex<LivePartialTracker>,
     pub last_voice_activity_ms: AtomicU64,
     pub committed_queue: Mutex<VecDeque<CommittedTranscript>>,
     pub injection_notify: Arc<Notify>,
@@ -58,6 +89,7 @@ impl AppState {
             overlay_visible: Mutex::new(true),
             session: Mutex::new(None),
             client_binding: Mutex::new(None),
+            live_partial_tracker: Mutex::new(LivePartialTracker::default()),
             last_voice_activity_ms: AtomicU64::new(0),
             committed_queue: Mutex::new(VecDeque::new()),
             injection_notify: Arc::new(Notify::new()),

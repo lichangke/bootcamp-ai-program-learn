@@ -324,6 +324,10 @@ async fn save_settings_impl(
 
 async fn start_recording_impl(app_handle: &AppHandle, state: &AppState) -> Result<(), AppError> {
     let runtime = state.runtime();
+    {
+        let mut tracker = runtime.live_partial_tracker.lock().await;
+        tracker.reset_for_session();
+    }
     runtime.last_voice_activity_ms.store(0, Ordering::Relaxed);
 
     {
@@ -435,7 +439,8 @@ async fn stop_recording_impl(app_handle: &AppHandle, state: &AppState) -> Result
         }
     }
 
-    runtime.last_voice_activity_ms.store(0, Ordering::Relaxed);
+    // Keep live partial tracker and recent voice activity until late committed
+    // events are handled; they will be reset at the next recording start.
 
     emit_state(app_handle, "Idle");
     info!("recording pipeline stopped");
@@ -826,7 +831,9 @@ fn validate_settings(mut settings: AppSettings) -> Result<AppSettings, String> {
     settings.api_key = settings.api_key.trim().to_string();
     settings.language_code = normalize_language_code(&settings.language_code);
     if !matches!(settings.language_code.as_str(), "eng" | "zho") {
-        return Err("languageCode must be one of: eng (English), zho (Chinese)".to_string());
+        return Err(
+            "languageCode must be one of: eng (English), zho (Simplified Chinese)".to_string(),
+        );
     }
 
     let trimmed_hotkey = settings.hotkey.trim();
@@ -851,7 +858,9 @@ fn normalize_language_code(language_code: &str) -> String {
     match normalized.as_str() {
         "" => default_language_code(),
         "en" | "eng" | "english" => "eng".to_string(),
-        "zh" | "zh-cn" | "cn" | "chinese" | "zho" => "zho".to_string(),
+        "zh" | "zh-cn" | "zh-hans" | "zh-tw" | "zh-hant" | "cn" | "chinese" | "zho" => {
+            "zho".to_string()
+        }
         "auto" => default_language_code(),
         _ => normalized,
     }

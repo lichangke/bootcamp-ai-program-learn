@@ -1,5 +1,6 @@
-﻿pub mod injector;
+pub mod injector;
 
+use hanconv::t2s;
 use thiserror::Error;
 
 pub const DEFAULT_INJECTION_THRESHOLD: usize = 10;
@@ -42,6 +43,19 @@ pub fn validate_transcript(text: &str) -> Result<String, ValidationError> {
     Ok(cleaned)
 }
 
+pub fn normalize_transcript_text(text: &str, language_code: &str) -> String {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    if language_code.trim() == "zho" {
+        t2s(trimmed)
+    } else {
+        trimmed.to_string()
+    }
+}
+
 pub fn append_terminal_punctuation(text: &str) -> String {
     let trimmed = text.trim();
     if trimmed.is_empty() {
@@ -56,6 +70,34 @@ pub fn append_terminal_punctuation(text: &str) -> String {
     format!("{trimmed}{suffix}")
 }
 
+pub fn resolve_committed_punctuation_delta(committed_text: &str, injected_text: &str) -> String {
+    let committed = committed_text.trim();
+    if committed.is_empty() {
+        return String::new();
+    }
+
+    let injected = injected_text.trim();
+    if injected.is_empty() || committed == injected {
+        return String::new();
+    }
+
+    if let Some(delta) = committed.strip_prefix(injected) {
+        if delta
+            .trim()
+            .chars()
+            .all(|ch| is_terminal_punctuation(ch) || is_closing_punctuation_wrapper(ch))
+        {
+            return delta.to_string();
+        }
+    }
+
+    if has_terminal_punctuation(injected) {
+        return String::new();
+    }
+
+    extract_terminal_punctuation_suffix(committed)
+}
+
 fn contains_malicious_patterns(text: &str) -> bool {
     let dangerous_patterns = ["$(", "`", ";", "&&", "||", "|", ">", "<"];
     dangerous_patterns
@@ -66,12 +108,44 @@ fn contains_malicious_patterns(text: &str) -> bool {
 fn has_terminal_punctuation(text: &str) -> bool {
     let mut chars = text.chars().rev();
     for ch in chars.by_ref() {
-        if matches!(ch, '"' | '\'' | '”' | '’' | ')' | ']' | '}') {
+        if is_closing_punctuation_wrapper(ch) {
             continue;
         }
-        return matches!(ch, '.' | ',' | '!' | '?' | '，' | '。' | '！' | '？');
+        return is_terminal_punctuation(ch);
     }
     false
+}
+
+fn is_terminal_punctuation(ch: char) -> bool {
+    matches!(ch, '.' | ',' | '!' | '?' | '，' | '。' | '！' | '？')
+}
+
+fn is_closing_punctuation_wrapper(ch: char) -> bool {
+    matches!(ch, '"' | '\'' | '”' | '’' | ')' | ']' | '}')
+}
+
+fn extract_terminal_punctuation_suffix(text: &str) -> String {
+    let trimmed_end = text.trim_end();
+    if trimmed_end.is_empty() {
+        return String::new();
+    }
+
+    let chars: Vec<(usize, char)> = trimmed_end.char_indices().collect();
+    if chars.is_empty() {
+        return String::new();
+    }
+
+    let mut index = chars.len() - 1;
+    while index > 0 && is_closing_punctuation_wrapper(chars[index].1) {
+        index -= 1;
+    }
+
+    if !is_terminal_punctuation(chars[index].1) {
+        return String::new();
+    }
+
+    let start = chars[index].0;
+    trimmed_end[start..].to_string()
 }
 
 fn contains_cjk(text: &str) -> bool {
@@ -130,5 +204,27 @@ mod tests {
     fn keep_existing_terminal_punctuation() {
         assert_eq!(append_terminal_punctuation("done!"), "done!");
         assert_eq!(append_terminal_punctuation("好的，"), "好的，");
+    }
+
+    #[test]
+    fn normalize_traditional_chinese_to_simplified() {
+        assert_eq!(normalize_transcript_text("後臺開發", "zho"), "后台开发");
+    }
+
+    #[test]
+    fn committed_delta_returns_punctuation_only() {
+        assert_eq!(
+            resolve_committed_punctuation_delta("hello world.", "hello world"),
+            "."
+        );
+        assert_eq!(resolve_committed_punctuation_delta("你好，", "你好"), "，");
+    }
+
+    #[test]
+    fn committed_delta_ignores_non_punctuation_suffix() {
+        assert_eq!(
+            resolve_committed_punctuation_delta("hello world again", "hello world"),
+            ""
+        );
     }
 }
