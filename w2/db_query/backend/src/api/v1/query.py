@@ -17,7 +17,7 @@ from src.models.query import (
     QueryResult,
     SqlQueryPayload,
 )
-from src.services.connection_service import ConnectionService
+from src.services.connection_service import ConnectionService, ConnectionValidationError
 from src.services.llm_service import LlmService, LlmServiceError
 from src.services.query_service import QueryService, QueryValidationError
 
@@ -79,6 +79,14 @@ def run_query(
             message=str(exc),
             query=payload.sql,
         )
+    except ConnectionValidationError as exc:
+        _error(
+            400,
+            error_type="connection",
+            error_code="CONNECTION_FAILED",
+            message=str(exc),
+            query=payload.sql,
+        )
     except Exception as exc:
         _error(
             500,
@@ -109,6 +117,13 @@ def generate_sql_from_natural(
             404,
             error_type="validation",
             error_code="METADATA_NOT_FOUND",
+            message=str(exc),
+        )
+    except ConnectionValidationError as exc:
+        _error(
+            400,
+            error_type="connection",
+            error_code="CONNECTION_FAILED",
             message=str(exc),
         )
     except LlmServiceError as exc:

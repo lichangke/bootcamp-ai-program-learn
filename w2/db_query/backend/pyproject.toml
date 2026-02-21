@@ -9,6 +9,7 @@ description = "FastAPI backend for the DB query tool"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+  "cryptography>=46.0.0",
   "fastapi>=0.128.7",
   "openai>=2.18.0",
   "pymysql>=1.1.1",
@@ -24,6 +25,9 @@ dev = [
   "pytest>=9.0.2",
   "ruff>=0.15.0",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
 
 [tool.mypy]
 python_version = "3.12"

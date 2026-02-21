@@ -59,5 +59,8 @@ class ConnectionService:
 
     def connect(self, url: str, timeout: int = 10) -> tuple[DbAdapter, Any]:
         _, adapter = self.validate_connection_url(url)
-        conn = adapter.connect(url, timeout=timeout)
+        try:
+            conn = adapter.connect(url, timeout=timeout)
+        except Exception as exc:
+            raise ConnectionValidationError(f"Failed to connect to database: {exc}") from exc
         return adapter, conn

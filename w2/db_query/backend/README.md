@@ -7,6 +7,7 @@ FastAPI backend for the DB Query Tool.
 - Python 3.12+
 - FastAPI + Pydantic
 - Database drivers: `psycopg2` (PostgreSQL), `pymysql` (MySQL)
+- MySQL auth support: `cryptography` (required for MySQL 8 `caching_sha2_password` / `sha256_password`)
 - SQL parser: `sqlglot`
 - Local persistence: SQLite (`~/.db_query/db_query.db`)
 

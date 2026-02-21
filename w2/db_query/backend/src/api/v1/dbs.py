@@ -105,6 +105,8 @@ def refresh_db(name: str = Path(pattern=r"^[a-zA-Z0-9_-]+$")) -> SchemaMetadata:
         return orchestrator.refresh_metadata(name)
     except DatabaseNotFoundError as exc:
         _error(404, error_code="DB_NOT_FOUND", message=str(exc))
+    except ConnectionValidationError as exc:
+        _error(400, error_code="CONNECTION_VALIDATION_FAILED", message=str(exc))
     except Exception as exc:
         _error(
             500,
