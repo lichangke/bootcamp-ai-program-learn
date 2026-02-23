@@ -1,7 +1,8 @@
 # PostgreSQL MCP Server 技术设计文档
 
-> 版本: 1.0.0
+> 版本: 1.1.0
 > 创建日期: 2026-02-23
+> 更新日期: 2026-02-23
 > 状态: 草稿
 > 关联 PRD: [0001-pg-mcp-prd.md](./0001-pg-mcp-prd.md)
 
@@ -25,8 +26,9 @@
 
 1. **异步优先**：全链路异步，充分利用 asyncpg 和 httpx 的异步能力
 2. **类型安全**：Pydantic 模型贯穿配置、请求、响应
-3. **安全纵深**：SQLGlot AST 校验 + 数据库只读角色双重防护
+3. **安全纵深**：SQLGlot AST 白名单校验 + 数据库只读角色双重防护
 4. **关注点分离**：清晰的模块边界，便于测试和维护
+5. **依赖注入**：通过 AppContext 容器管理服务依赖，提高可测试性
 
 ---
 
@@ -68,6 +70,7 @@ pg_mcp/
 ├── __init__.py
 ├── __main__.py              # 入口点
 ├── server.py                # FastMCP Server 定义
+├── context.py               # 应用上下文（依赖注入容器）
 ├── config/
 │   ├── __init__.py
 │   └── settings.py          # Pydantic Settings 配置
@@ -78,12 +81,15 @@ pg_mcp/
 │   └── executor.py          # SQL 执行器
 ├── security/
 │   ├── __init__.py
-│   └── validator.py         # SQLGlot SQL 安全校验
+│   └── validator.py         # SQLGlot SQL 安全校验（白名单模式）
 ├── models/
 │   ├── __init__.py
 │   ├── schema.py            # Schema 数据模型
 │   ├── request.py           # 请求模型
 │   └── response.py          # 响应模型
+├── exceptions/
+│   ├── __init__.py
+│   └── errors.py            # 类型化异常定义
 └── utils/
     ├── __init__.py
     └── logging.py           # 日志工具
@@ -97,12 +103,14 @@ pg_mcp/
 
 使用 `pydantic-settings` 实现类型安全的配置管理，支持环境变量和配置文件。
 
+> **注意**：仅顶层 `Settings` 类继承 `BaseSettings`，嵌套配置类使用 `BaseModel` 以避免环境变量解析冲突。
+
 ```python
 # pg_mcp/config/settings.py
-from pydantic import Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-class DatabaseConfig(BaseSettings):
+class DatabaseConfig(BaseModel):
     """单个数据库连接配置"""
     name: str
     host: str = "localhost"
@@ -115,29 +123,57 @@ class DatabaseConfig(BaseSettings):
     max_connections: int = 10
     is_default: bool = False
 
-class DeepSeekConfig(BaseSettings):
+class DeepSeekConfig(BaseModel):
     """DeepSeek LLM 配置"""
-    api_key: SecretStr = Field(..., alias="DEEPSEEK_API_KEY")
+    api_key: SecretStr
     base_url: str = "https://api.deepseek.com/v1"
     model: str = "deepseek-chat"
     temperature: float = 0.1
     max_tokens: int = 2000
     timeout_seconds: int = 30
     max_retries: int = 3
+    retry_base_delay: float = 1.0  # 指数退避基础延迟（秒）
 
-class QueryConfig(BaseSettings):
+class QueryConfig(BaseModel):
     """查询执行配置"""
     timeout_seconds: int = 30
     max_rows: int = 100
     max_rows_limit: int = 1000
     default_return_mode: str = "both"  # sql | result | both
 
-class SecurityConfig(BaseSettings):
+class SchemaCacheConfig(BaseModel):
+    """Schema 缓存配置"""
+    ttl_minutes: int = 60  # 缓存过期时间
+    auto_refresh: bool = True  # 是否自动刷新过期缓存
+
+class SecurityConfig(BaseModel):
     """安全配置"""
-    allowed_statements: list[str] = ["SELECT"]
+    # 白名单模式：仅允许以下语句类型
+    allowed_statement_types: list[str] = ["Select"]
+    # 白名单模式：允许的 AST 节点类型
+    allowed_ast_nodes: list[str] = [
+        "Select", "From", "Join", "Where", "Group", "Having",
+        "Order", "Limit", "Offset", "With", "Union", "Intersect",
+        "Except", "Subquery", "Column", "Table", "Alias", "Star",
+        "Literal", "Func", "Case", "Cast", "Between", "In", "Like",
+        "And", "Or", "Not", "Eq", "NEq", "GT", "GTE", "LT", "LTE",
+        "Add", "Sub", "Mul", "Div", "Mod", "Neg", "Paren",
+        "Distinct", "All", "Null", "Boolean", "Interval",
+        "Extract", "Coalesce", "NullIf", "Greatest", "Least",
+    ]
+    # 黑名单：危险函数（在白名单基础上额外拦截）
     blocked_functions: list[str] = [
         "pg_sleep", "lo_export", "lo_import",
-        "pg_read_file", "pg_write_file"
+        "pg_read_file", "pg_write_file", "pg_read_binary_file",
+        "pg_ls_dir", "pg_stat_file", "pg_terminate_backend",
+        "pg_cancel_backend", "pg_reload_conf", "set_config",
+        "current_setting",  # 可能泄露配置信息
+    ]
+    # 黑名单：危险语句类型（SELECT INTO, COPY 等）
+    blocked_constructs: list[str] = [
+        "Into",  # SELECT INTO
+        "Copy",  # COPY
+        "Lock",  # LOCK TABLE
     ]
     enable_prompt_injection_check: bool = True
 
@@ -155,6 +191,7 @@ class Settings(BaseSettings):
     deepseek: DeepSeekConfig
     query: QueryConfig = QueryConfig()
     security: SecurityConfig = SecurityConfig()
+    schema_cache: SchemaCacheConfig = SchemaCacheConfig()
 
     @property
     def default_database(self) -> DatabaseConfig | None:
@@ -165,40 +202,143 @@ class Settings(BaseSettings):
         return self.databases[0] if self.databases else None
 ```
 
-### 3.2 FastMCP Server 定义
+### 3.2 应用上下文（依赖注入）
 
-使用 FastMCP 装饰器定义 MCP Tool。
+使用 `AppContext` 容器管理服务依赖，替代全局单例模式，提高可测试性。
+
+```python
+# pg_mcp/context.py
+from dataclasses import dataclass
+from pg_mcp.config.settings import Settings
+from pg_mcp.services.llm import LLMService
+from pg_mcp.services.executor import SQLExecutor
+from pg_mcp.services.schema import SchemaService
+from pg_mcp.security.validator import SQLValidator
+
+@dataclass
+class AppContext:
+    """应用上下文 - 依赖注入容器"""
+    settings: Settings
+    validator: SQLValidator
+    executor: SQLExecutor
+    schema_service: SchemaService
+    llm_service: LLMService
+
+    async def close(self):
+        """关闭所有资源"""
+        await self.llm_service.close()
+        await self.executor.close()
+
+# 全局上下文（在 lifespan 中初始化）
+_context: AppContext | None = None
+
+def get_context() -> AppContext:
+    """获取应用上下文"""
+    if _context is None:
+        raise RuntimeError("应用上下文未初始化")
+    return _context
+
+def set_context(ctx: AppContext) -> None:
+    """设置应用上下文"""
+    global _context
+    _context = ctx
+```
+
+### 3.3 类型化异常定义
+
+定义类型化异常，实现精确的错误处理和映射。
+
+```python
+# pg_mcp/exceptions/errors.py
+from enum import Enum
+
+class ErrorCode(str, Enum):
+    """错误码枚举"""
+    DB_NOT_FOUND = "DB_NOT_FOUND"
+    DB_CONNECTION_ERROR = "DB_CONNECTION_ERROR"
+    SCHEMA_NOT_READY = "SCHEMA_NOT_READY"
+    SQL_GENERATION_ERROR = "SQL_GENERATION_ERROR"
+    SECURITY_VIOLATION = "SECURITY_VIOLATION"
+    QUERY_TIMEOUT = "QUERY_TIMEOUT"
+    QUERY_EXECUTION_ERROR = "QUERY_EXECUTION_ERROR"
+    INVALID_INPUT = "INVALID_INPUT"
+    RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED"
+
+class PgMcpError(Exception):
+    """基础异常类"""
+    def __init__(self, code: ErrorCode, message: str, details: dict | None = None):
+        self.code = code
+        self.message = message
+        self.details = details or {}
+        super().__init__(message)
+
+class DatabaseNotFoundError(PgMcpError):
+    def __init__(self, db_name: str):
+        super().__init__(
+            ErrorCode.DB_NOT_FOUND,
+            f"数据库 '{db_name}' 未配置",
+            {"database": db_name}
+        )
+
+class SchemaNotReadyError(PgMcpError):
+    def __init__(self, db_name: str):
+        super().__init__(
+            ErrorCode.SCHEMA_NOT_READY,
+            f"数据库 '{db_name}' 的 Schema 缓存未就绪",
+            {"database": db_name}
+        )
+
+class SecurityViolationError(PgMcpError):
+    def __init__(self, message: str, detected_issues: list[str]):
+        super().__init__(
+            ErrorCode.SECURITY_VIOLATION,
+            message,
+            {"detected_issues": detected_issues}
+        )
+
+class QueryTimeoutError(PgMcpError):
+    def __init__(self, timeout_seconds: int):
+        super().__init__(
+            ErrorCode.QUERY_TIMEOUT,
+            f"查询执行超时（{timeout_seconds}秒）",
+            {"timeout_seconds": timeout_seconds}
+        )
+
+class SQLGenerationError(PgMcpError):
+    def __init__(self, message: str):
+        super().__init__(
+            ErrorCode.SQL_GENERATION_ERROR,
+            f"SQL 生成失败: {message}"
+        )
+```
+
+### 3.4 FastMCP Server 定义
+
+使用 FastMCP 装饰器定义 MCP Tool，通过依赖注入获取服务实例。
 
 ```python
 # pg_mcp/server.py
 from fastmcp import FastMCP
 from pydantic import BaseModel, Field
 from typing import Literal
-from pg_mcp.config.settings import Settings
-from pg_mcp.services.llm import LLMService
-from pg_mcp.services.executor import SQLExecutor
-from pg_mcp.services.schema import SchemaService
-from pg_mcp.security.validator import SQLValidator
+from pg_mcp.context import get_context
 from pg_mcp.models.response import QueryResponse, ErrorResponse
+from pg_mcp.exceptions.errors import (
+    PgMcpError, DatabaseNotFoundError, SchemaNotReadyError
+)
 
 # 初始化 FastMCP Server
 mcp = FastMCP("pg-mcp-server")
 
-# 全局服务实例（在 lifespan 中初始化）
-settings: Settings = None
-llm_service: LLMService = None
-executor: SQLExecutor = None
-schema_service: SchemaService = None
-validator: SQLValidator = None
+# 返回模式类型
+ReturnMode = Literal["sql", "result", "both"]
 
 
 class QueryInput(BaseModel):
     """query_database 工具输入参数"""
     query: str = Field(..., description="自然语言查询描述")
     database: str | None = Field(None, description="目标数据库名称")
-    return_mode: Literal["sql", "result", "both"] = Field(
-        "both", description="返回模式"
-    )
+    return_mode: ReturnMode = Field("both", description="返回模式")
     limit: int = Field(100, ge=1, le=1000, description="结果行数限制")
 
 
@@ -206,7 +346,7 @@ class QueryInput(BaseModel):
 async def query_database(
     query: str,
     database: str | None = None,
-    return_mode: str = "both",
+    return_mode: ReturnMode = "both",
     limit: int = 100
 ) -> dict:
     """
@@ -224,27 +364,39 @@ async def query_database(
     Returns:
         包含 SQL 语句和/或查询结果的字典
     """
+    ctx = get_context()
+
     try:
-        # 1. 确定目标数据库
-        db_config = _get_database_config(database)
-        if not db_config:
+        # 1. 验证 return_mode（类型系统已保证，此处为防御性检查）
+        if return_mode not in ("sql", "result", "both"):
             return ErrorResponse(
-                code="DB_NOT_FOUND",
-                message=f"数据库 '{database}' 未配置"
+                code="INVALID_INPUT",
+                message=f"无效的 return_mode: {return_mode}"
             ).model_dump()
 
-        # 2. 获取 Schema 信息
-        schema_info = await schema_service.get_schema(db_config.name)
+        # 2. 确定目标数据库
+        db_name = database or (ctx.settings.default_database.name if ctx.settings.default_database else None)
+        if not db_name:
+            raise DatabaseNotFoundError(database or "default")
 
-        # 3. 调用 LLM 生成 SQL
-        generated_sql = await llm_service.generate_sql(
+        db_config = _get_database_config(ctx, db_name)
+        if not db_config:
+            raise DatabaseNotFoundError(db_name)
+
+        # 3. 获取 Schema 信息（带缓存检查）
+        schema_info = await ctx.schema_service.get_schema(db_config.name)
+        if schema_info is None:
+            raise SchemaNotReadyError(db_config.name)
+
+        # 4. 调用 LLM 生成 SQL
+        generated_sql = await ctx.llm_service.generate_sql(
             natural_query=query,
             schema_info=schema_info,
             dialect="postgres"
         )
 
-        # 4. SQL 安全校验
-        validation_result = validator.validate(generated_sql)
+        # 5. SQL 安全校验（白名单模式）
+        validation_result = ctx.validator.validate(generated_sql)
         if not validation_result.is_safe:
             return ErrorResponse(
                 code="SECURITY_VIOLATION",
@@ -252,15 +404,15 @@ async def query_database(
                 details={"detected": validation_result.detected_issues}
             ).model_dump()
 
-        # 5. 根据 return_mode 决定是否执行
+        # 6. 根据 return_mode 决定是否执行
         response_data = {"sql": generated_sql}
 
         if return_mode in ("result", "both"):
             # 执行 SQL
-            result = await executor.execute(
+            result = await ctx.executor.execute(
                 db_name=db_config.name,
                 sql=generated_sql,
-                limit=min(limit, settings.query.max_rows_limit)
+                limit=min(limit, ctx.settings.query.max_rows_limit)
             )
             response_data["result"] = result.model_dump()
 
@@ -272,32 +424,40 @@ async def query_database(
             data=response_data
         ).model_dump()
 
+    except PgMcpError as e:
+        # 类型化异常 -> 结构化错误响应
+        return ErrorResponse(
+            code=e.code.value,
+            message=e.message,
+            details=e.details
+        ).model_dump()
     except Exception as e:
+        # 未预期异常 -> 通用错误（不暴露内部细节）
         return ErrorResponse(
             code="QUERY_EXECUTION_ERROR",
-            message=str(e)
+            message="查询执行过程中发生错误，请稍后重试"
         ).model_dump()
 
 
-def _get_database_config(db_name: str | None):
+def _get_database_config(ctx, db_name: str):
     """获取数据库配置"""
-    if db_name is None:
-        return settings.default_database
-    for db in settings.databases:
+    for db in ctx.settings.databases:
         if db.name == db_name:
             return db
     return None
 ```
 
-### 3.3 SQL 安全校验器 (SQLGlot)
+### 3.5 SQL 安全校验器 (SQLGlot) - 白名单模式
 
-使用 SQLGlot 解析 SQL AST，进行语法级别的安全校验。
+使用 SQLGlot 解析 SQL AST，采用**白名单模式**进行安全校验，仅允许明确列出的 AST 节点类型。
+
+> **重要**：白名单模式比黑名单更安全，可防止遗漏危险构造（如 SELECT INTO、COPY 等）。
 
 ```python
 # pg_mcp/security/validator.py
 import sqlglot
 from sqlglot import exp
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pg_mcp.config.settings import SecurityConfig
 
 @dataclass
@@ -305,36 +465,24 @@ class ValidationResult:
     """校验结果"""
     is_safe: bool
     message: str = ""
-    detected_issues: list[str] = None
-
-    def __post_init__(self):
-        if self.detected_issues is None:
-            self.detected_issues = []
+    detected_issues: list[str] = field(default_factory=list)
 
 
 class SQLValidator:
-    """SQL 安全校验器 - 基于 SQLGlot AST 分析"""
-
-    # 危险语句类型映射
-    DANGEROUS_STATEMENTS = {
-        exp.Insert: "INSERT",
-        exp.Update: "UPDATE",
-        exp.Delete: "DELETE",
-        exp.Drop: "DROP",
-        exp.Create: "CREATE",
-        exp.Alter: "ALTER",
-        exp.Truncate: "TRUNCATE",
-        exp.Grant: "GRANT",
-        exp.Revoke: "REVOKE",
-    }
+    """SQL 安全校验器 - 基于 SQLGlot AST 白名单分析"""
 
     def __init__(self, config: SecurityConfig):
         self.config = config
+        # 构建允许的 AST 节点类型集合
+        self.allowed_nodes = set(config.allowed_ast_nodes)
+        # 构建阻止的函数集合（小写）
         self.blocked_functions = set(f.lower() for f in config.blocked_functions)
+        # 构建阻止的构造集合
+        self.blocked_constructs = set(config.blocked_constructs)
 
     def validate(self, sql: str) -> ValidationResult:
         """
-        校验 SQL 语句安全性
+        校验 SQL 语句安全性（白名单模式）
 
         Args:
             sql: 待校验的 SQL 语句
@@ -351,20 +499,30 @@ class SQLValidator:
                 message=f"SQL 语法解析失败: {str(e)}"
             )
 
+        if not statements:
+            return ValidationResult(
+                is_safe=False,
+                message="SQL 语句为空"
+            )
+
         issues = []
 
         for stmt in statements:
-            # 检查语句类型
-            stmt_issues = self._check_statement_type(stmt)
+            # 1. 检查顶层语句类型（必须是 SELECT 或 WITH）
+            stmt_issues = self._check_top_level_statement(stmt)
             issues.extend(stmt_issues)
 
-            # 检查危险函数
-            func_issues = self._check_dangerous_functions(stmt)
+            # 2. 白名单检查：遍历所有 AST 节点
+            node_issues = self._check_ast_nodes_whitelist(stmt)
+            issues.extend(node_issues)
+
+            # 3. 黑名单检查：危险函数
+            func_issues = self._check_blocked_functions(stmt)
             issues.extend(func_issues)
 
-            # 检查子查询中的写操作
-            subquery_issues = self._check_subqueries(stmt)
-            issues.extend(subquery_issues)
+            # 4. 黑名单检查：危险构造（SELECT INTO 等）
+            construct_issues = self._check_blocked_constructs(stmt)
+            issues.extend(construct_issues)
 
         if issues:
             return ValidationResult(
@@ -375,32 +533,47 @@ class SQLValidator:
 
         return ValidationResult(is_safe=True, message="校验通过")
 
-    def _check_statement_type(self, stmt: exp.Expression) -> list[str]:
-        """检查语句类型是否允许"""
+    def _check_top_level_statement(self, stmt: exp.Expression) -> list[str]:
+        """检查顶层语句类型"""
         issues = []
+        stmt_type = stmt.__class__.__name__
 
-        for dangerous_type, name in self.DANGEROUS_STATEMENTS.items():
-            if isinstance(stmt, dangerous_type):
-                issues.append(f"禁止的语句类型: {name}")
-
-        # 确保是 SELECT 语句
-        if not isinstance(stmt, exp.Select):
-            # 允许 WITH (CTE) 语句，但内部必须是 SELECT
-            if isinstance(stmt, exp.With):
-                # 检查 WITH 的主体是否为 SELECT
-                if not isinstance(stmt.this, exp.Select):
-                    issues.append("WITH 语句的主体必须是 SELECT")
-            elif stmt.__class__.__name__ not in ["Select"]:
-                issues.append(f"不支持的语句类型: {stmt.__class__.__name__}")
+        # 允许 Select 和 With (CTE)
+        if stmt_type == "Select":
+            return issues
+        elif stmt_type == "With":
+            # CTE 的主体必须是 SELECT
+            if not isinstance(stmt.this, exp.Select):
+                issues.append(f"WITH 语句的主体必须是 SELECT，实际为: {stmt.this.__class__.__name__}")
+        else:
+            issues.append(f"禁止的顶层语句类型: {stmt_type}")
 
         return issues
 
-    def _check_dangerous_functions(self, stmt: exp.Expression) -> list[str]:
+    def _check_ast_nodes_whitelist(self, stmt: exp.Expression) -> list[str]:
+        """白名单检查：遍历所有 AST 节点"""
+        issues = []
+
+        for node in stmt.walk():
+            node_type = node.__class__.__name__
+            if node_type not in self.allowed_nodes:
+                # 检查是否是已知的危险类型
+                if node_type in ("Insert", "Update", "Delete", "Drop", "Create",
+                                 "Alter", "Truncate", "Grant", "Revoke", "Copy"):
+                    issues.append(f"禁止的语句类型: {node_type}")
+                elif node_type not in self.blocked_constructs:
+                    # 未知节点类型，记录但不一定阻止（可配置）
+                    # 为安全起见，默认阻止未知节点
+                    issues.append(f"不允许的 AST 节点类型: {node_type}")
+
+        return issues
+
+    def _check_blocked_functions(self, stmt: exp.Expression) -> list[str]:
         """检查是否调用了危险函数"""
         issues = []
 
         for func in stmt.find_all(exp.Func):
-            func_name = func.name.lower() if hasattr(func, 'name') else ""
+            func_name = getattr(func, 'name', '').lower()
             if func_name in self.blocked_functions:
                 issues.append(f"禁止的函数调用: {func_name}")
 
@@ -412,15 +585,18 @@ class SQLValidator:
 
         return issues
 
-    def _check_subqueries(self, stmt: exp.Expression) -> list[str]:
-        """检查子查询中是否有写操作"""
+    def _check_blocked_constructs(self, stmt: exp.Expression) -> list[str]:
+        """检查危险构造（SELECT INTO 等）"""
         issues = []
 
-        for subquery in stmt.find_all(exp.Subquery):
-            inner = subquery.this
-            for dangerous_type, name in self.DANGEROUS_STATEMENTS.items():
-                if isinstance(inner, dangerous_type):
-                    issues.append(f"子查询中禁止的操作: {name}")
+        for node in stmt.walk():
+            node_type = node.__class__.__name__
+            if node_type in self.blocked_constructs:
+                issues.append(f"禁止的构造: {node_type}")
+
+        # 特别检查 SELECT INTO
+        if isinstance(stmt, exp.Select) and stmt.args.get("into"):
+            issues.append("禁止的构造: SELECT INTO")
 
         return issues
 
@@ -445,17 +621,20 @@ class SQLValidator:
             return {}
 ```
 
-### 3.4 数据库执行器 (asyncpg)
+### 3.6 数据库执行器 (asyncpg)
 
-使用 asyncpg 连接池管理数据库连接，执行只读查询。
+使用 asyncpg 连接池管理数据库连接，执行只读查询。使用 AST 方式处理 LIMIT，并通过 `limit + 1` 策略准确检测截断。
 
 ```python
 # pg_mcp/services/executor.py
 import asyncpg
+import sqlglot
+from sqlglot import exp
 from asyncpg import Pool
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel
 from pg_mcp.config.settings import DatabaseConfig, QueryConfig
+from pg_mcp.exceptions.errors import QueryTimeoutError
 
 class QueryResult(BaseModel):
     """查询结果模型"""
@@ -492,6 +671,10 @@ class SQLExecutor:
             )
             self._pools[db_config.name] = pool
 
+    def get_pool(self, db_name: str) -> Pool | None:
+        """获取数据库连接池（公开访问器）"""
+        return self._pools.get(db_name)
+
     async def close(self):
         """关闭所有连接池"""
         for pool in self._pools.values():
@@ -518,44 +701,71 @@ class SQLExecutor:
         if not pool:
             raise ValueError(f"数据库连接池不存在: {db_name}")
 
-        start_time = datetime.now()
+        start_time = datetime.now(timezone.utc)
 
         async with pool.acquire() as conn:
-            # 设置语句超时
-            await conn.execute(
-                f"SET statement_timeout = '{self.query_config.timeout_seconds}s'"
-            )
+            try:
+                # 设置语句超时
+                await conn.execute(
+                    f"SET statement_timeout = '{self.query_config.timeout_seconds}s'"
+                )
 
-            # 添加 LIMIT 子句（如果原 SQL 没有）
-            limited_sql = self._ensure_limit(sql, limit)
+                # 使用 AST 方式添加/修改 LIMIT 子句
+                # 获取 limit + 1 行以准确检测截断
+                limited_sql = self._ensure_limit_via_ast(sql, limit + 1)
 
-            # 执行查询
-            rows = await conn.fetch(limited_sql)
+                # 执行查询
+                rows = await conn.fetch(limited_sql)
 
-            # 提取列名
-            columns = list(rows[0].keys()) if rows else []
+                # 提取列名
+                columns = list(rows[0].keys()) if rows else []
 
-            # 转换结果
-            result_rows = [list(row.values()) for row in rows]
+                # 检测是否截断（获取了 limit + 1 行）
+                truncated = len(rows) > limit
+                if truncated:
+                    rows = rows[:limit]  # 只返回 limit 行
 
-            execution_time = (datetime.now() - start_time).total_seconds() * 1000
+                # 转换结果
+                result_rows = [list(row.values()) for row in rows]
 
-            return QueryResult(
-                columns=columns,
-                rows=result_rows,
-                row_count=len(result_rows),
-                truncated=len(result_rows) >= limit,
-                execution_time_ms=int(execution_time)
-            )
+                execution_time = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
 
-    def _ensure_limit(self, sql: str, limit: int) -> str:
-        """确保 SQL 有 LIMIT 子句"""
-        sql_upper = sql.upper().strip()
-        if "LIMIT" not in sql_upper:
-            # 移除末尾分号
-            sql = sql.rstrip(";").strip()
-            return f"{sql} LIMIT {limit}"
-        return sql
+                return QueryResult(
+                    columns=columns,
+                    rows=result_rows,
+                    row_count=len(result_rows),
+                    truncated=truncated,
+                    execution_time_ms=int(execution_time)
+                )
+
+            except asyncpg.exceptions.QueryCanceledError:
+                raise QueryTimeoutError(self.query_config.timeout_seconds)
+
+    def _ensure_limit_via_ast(self, sql: str, limit: int) -> str:
+        """使用 AST 方式确保 SQL 有 LIMIT 子句"""
+        try:
+            stmt = sqlglot.parse_one(sql, dialect="postgres")
+
+            # 检查是否已有 LIMIT
+            existing_limit = stmt.find(exp.Limit)
+            if existing_limit:
+                # 如果已有 LIMIT，取较小值
+                existing_value = existing_limit.this
+                if isinstance(existing_value, exp.Literal):
+                    existing_int = int(existing_value.this)
+                    if existing_int <= limit:
+                        return sql  # 保持原有 LIMIT
+                # 替换为新的 LIMIT
+                existing_limit.set("this", exp.Literal.number(limit))
+            else:
+                # 添加 LIMIT 子句
+                stmt = stmt.limit(limit)
+
+            return stmt.sql(dialect="postgres")
+        except Exception:
+            # AST 解析失败时回退到字符串方式
+            sql_stripped = sql.rstrip(";").strip()
+            return f"{sql_stripped} LIMIT {limit}"
 
     async def health_check(self, db_name: str) -> bool:
         """健康检查"""
@@ -570,15 +780,16 @@ class SQLExecutor:
             return False
 ```
 
-### 3.5 Schema 发现服务
+### 3.7 Schema 发现服务
 
-自动发现并缓存数据库 Schema 信息。
+自动发现并缓存数据库 Schema 信息。优化为批量查询，解决 N+1 问题，并支持 TTL 缓存刷新。
 
 ```python
 # pg_mcp/services/schema.py
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pydantic import BaseModel
 from asyncpg import Pool
+from pg_mcp.config.settings import SchemaCacheConfig
 
 class ColumnInfo(BaseModel):
     """列信息"""
@@ -605,54 +816,72 @@ class SchemaInfo(BaseModel):
 class SchemaService:
     """Schema 发现与缓存服务"""
 
-    # Schema 发现 SQL
-    TABLES_QUERY = """
-        SELECT
-            t.table_schema,
-            t.table_name,
-            obj_description(
-                (quote_ident(t.table_schema) || '.' || quote_ident(t.table_name))::regclass
-            ) as table_comment
-        FROM information_schema.tables t
-        WHERE t.table_schema NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
-          AND t.table_type = 'BASE TABLE'
-        ORDER BY t.table_schema, t.table_name
-    """
-
-    COLUMNS_QUERY = """
-        SELECT
-            c.column_name,
-            c.data_type,
-            c.is_nullable,
-            c.column_default,
-            col_description(
-                (quote_ident(c.table_schema) || '.' || quote_ident(c.table_name))::regclass,
-                c.ordinal_position
-            ) as column_comment,
-            CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END as is_primary_key
-        FROM information_schema.columns c
-        LEFT JOIN (
-            SELECT kcu.column_name, kcu.table_schema, kcu.table_name
+    # 批量 Schema 发现 SQL（解决 N+1 问题）
+    BULK_SCHEMA_QUERY = """
+        WITH table_info AS (
+            SELECT
+                t.table_schema,
+                t.table_name,
+                obj_description(
+                    (quote_ident(t.table_schema) || '.' || quote_ident(t.table_name))::regclass
+                ) as table_comment
+            FROM information_schema.tables t
+            WHERE t.table_schema NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+              AND t.table_type = 'BASE TABLE'
+        ),
+        column_info AS (
+            SELECT
+                c.table_schema,
+                c.table_name,
+                c.column_name,
+                c.data_type,
+                c.is_nullable,
+                c.ordinal_position,
+                col_description(
+                    (quote_ident(c.table_schema) || '.' || quote_ident(c.table_name))::regclass,
+                    c.ordinal_position
+                ) as column_comment
+            FROM information_schema.columns c
+            WHERE c.table_schema NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+        ),
+        pk_info AS (
+            SELECT
+                kcu.table_schema,
+                kcu.table_name,
+                kcu.column_name
             FROM information_schema.table_constraints tc
             JOIN information_schema.key_column_usage kcu
                 ON tc.constraint_name = kcu.constraint_name
+                AND tc.table_schema = kcu.table_schema
             WHERE tc.constraint_type = 'PRIMARY KEY'
-        ) pk ON c.column_name = pk.column_name
-            AND c.table_schema = pk.table_schema
+        )
+        SELECT
+            t.table_schema,
+            t.table_name,
+            t.table_comment,
+            c.column_name,
+            c.data_type,
+            c.is_nullable,
+            c.ordinal_position,
+            c.column_comment,
+            CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END as is_primary_key
+        FROM table_info t
+        LEFT JOIN column_info c
+            ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+        LEFT JOIN pk_info pk
+            ON c.table_schema = pk.table_schema
             AND c.table_name = pk.table_name
-        WHERE c.table_schema = $1 AND c.table_name = $2
-        ORDER BY c.ordinal_position
+            AND c.column_name = pk.column_name
+        ORDER BY t.table_schema, t.table_name, c.ordinal_position
     """
 
-    def __init__(self, excluded_schemas: list[str] = None):
-        self.excluded_schemas = excluded_schemas or [
-            "pg_catalog", "information_schema", "pg_toast"
-        ]
+    def __init__(self, cache_config: SchemaCacheConfig | None = None):
+        self.cache_config = cache_config or SchemaCacheConfig()
         self._cache: dict[str, SchemaInfo] = {}
 
     async def discover(self, db_name: str, pool: Pool) -> SchemaInfo:
         """
-        发现数据库 Schema
+        发现数据库 Schema（批量查询，单次往返）
 
         Args:
             db_name: 数据库名称
@@ -662,49 +891,84 @@ class SchemaService:
             SchemaInfo: Schema 信息
         """
         async with pool.acquire() as conn:
-            # 获取所有表
-            tables_rows = await conn.fetch(self.TABLES_QUERY)
+            # 单次批量查询获取所有信息
+            rows = await conn.fetch(self.BULK_SCHEMA_QUERY)
 
-            tables = []
-            for table_row in tables_rows:
-                # 获取列信息
-                columns_rows = await conn.fetch(
-                    self.COLUMNS_QUERY,
-                    table_row["table_schema"],
-                    table_row["table_name"]
-                )
+            # 在内存中分组构建 Schema
+            tables_dict: dict[tuple[str, str], TableInfo] = {}
 
-                columns = [
-                    ColumnInfo(
-                        name=col["column_name"],
-                        data_type=col["data_type"],
-                        nullable=col["is_nullable"] == "YES",
-                        is_primary_key=col["is_primary_key"],
-                        comment=col["column_comment"]
+            for row in rows:
+                key = (row["table_schema"], row["table_name"])
+
+                if key not in tables_dict:
+                    tables_dict[key] = TableInfo(
+                        name=row["table_name"],
+                        schema_name=row["table_schema"],
+                        columns=[],
+                        comment=row["table_comment"]
                     )
-                    for col in columns_rows
-                ]
 
-                tables.append(TableInfo(
-                    name=table_row["table_name"],
-                    schema_name=table_row["table_schema"],
-                    columns=columns,
-                    comment=table_row["table_comment"]
-                ))
+                # 添加列信息（如果存在）
+                if row["column_name"]:
+                    tables_dict[key].columns.append(ColumnInfo(
+                        name=row["column_name"],
+                        data_type=row["data_type"],
+                        nullable=row["is_nullable"] == "YES",
+                        is_primary_key=row["is_primary_key"],
+                        comment=row["column_comment"]
+                    ))
 
             schema_info = SchemaInfo(
                 database=db_name,
-                tables=tables,
-                cached_at=datetime.now()
+                tables=list(tables_dict.values()),
+                cached_at=datetime.now(timezone.utc)
             )
 
             # 缓存
             self._cache[db_name] = schema_info
             return schema_info
 
-    async def get_schema(self, db_name: str) -> SchemaInfo | None:
-        """获取缓存的 Schema 信息"""
-        return self._cache.get(db_name)
+    async def get_schema(self, db_name: str, pool: Pool | None = None) -> SchemaInfo | None:
+        """
+        获取 Schema 信息（带 TTL 检查）
+
+        Args:
+            db_name: 数据库名称
+            pool: 可选的连接池，用于自动刷新
+
+        Returns:
+            SchemaInfo | None: Schema 信息
+        """
+        cached = self._cache.get(db_name)
+
+        if cached is None:
+            return None
+
+        # 检查 TTL
+        ttl = timedelta(minutes=self.cache_config.ttl_minutes)
+        if datetime.now(timezone.utc) - cached.cached_at > ttl:
+            if self.cache_config.auto_refresh and pool:
+                # 自动刷新
+                return await self.discover(db_name, pool)
+            # 返回过期缓存（但标记）
+            return cached
+
+        return cached
+
+    def is_cache_expired(self, db_name: str) -> bool:
+        """检查缓存是否过期"""
+        cached = self._cache.get(db_name)
+        if cached is None:
+            return True
+        ttl = timedelta(minutes=self.cache_config.ttl_minutes)
+        return datetime.now(timezone.utc) - cached.cached_at > ttl
+
+    def invalidate_cache(self, db_name: str | None = None):
+        """使缓存失效"""
+        if db_name:
+            self._cache.pop(db_name, None)
+        else:
+            self._cache.clear()
 
     def format_for_llm(self, schema_info: SchemaInfo) -> str:
         """
@@ -738,15 +1002,17 @@ class SchemaService:
         return "\n".join(lines)
 ```
 
-### 3.6 LLM 服务 (DeepSeek)
+### 3.8 LLM 服务 (DeepSeek)
 
-集成 DeepSeek API 进行自然语言到 SQL 的转换。
+集成 DeepSeek API 进行自然语言到 SQL 的转换，支持指数退避重试。
 
 ```python
 # pg_mcp/services/llm.py
+import asyncio
 import httpx
 from pg_mcp.config.settings import DeepSeekConfig
 from pg_mcp.services.schema import SchemaInfo, SchemaService
+from pg_mcp.exceptions.errors import SQLGenerationError
 
 class LLMService:
     """DeepSeek LLM 服务 - 自然语言转 SQL"""
@@ -798,16 +1064,16 @@ class LLMService:
 
 请生成对应的 SQL 查询语句："""
 
-        # 调用 DeepSeek API
-        response = await self._call_api(user_message)
+        # 调用 DeepSeek API（带指数退避重试）
+        response = await self._call_api_with_retry(user_message)
 
         # 清理响应（移除可能的 markdown 格式）
         sql = self._clean_sql_response(response)
 
         return sql
 
-    async def _call_api(self, user_message: str) -> str:
-        """调用 DeepSeek API"""
+    async def _call_api_with_retry(self, user_message: str) -> str:
+        """调用 DeepSeek API（带指数退避重试）"""
         payload = {
             "model": self.config.model,
             "messages": [
@@ -818,6 +1084,8 @@ class LLMService:
             "max_tokens": self.config.max_tokens
         }
 
+        last_error: Exception | None = None
+
         for attempt in range(self.config.max_retries):
             try:
                 response = await self._client.post(
@@ -827,12 +1095,32 @@ class LLMService:
                 response.raise_for_status()
                 data = response.json()
                 return data["choices"][0]["message"]["content"]
+
             except httpx.HTTPStatusError as e:
-                if attempt == self.config.max_retries - 1:
-                    raise RuntimeError(f"DeepSeek API 调用失败: {e}")
+                last_error = e
+                # 429 (Rate Limit) 或 5xx 错误时重试
+                if e.response.status_code in (429, 500, 502, 503, 504):
+                    await self._exponential_backoff(attempt)
+                else:
+                    raise SQLGenerationError(f"API 错误: {e.response.status_code}")
+
+            except httpx.TimeoutException as e:
+                last_error = e
+                await self._exponential_backoff(attempt)
+
             except Exception as e:
-                if attempt == self.config.max_retries - 1:
-                    raise RuntimeError(f"DeepSeek API 调用异常: {e}")
+                last_error = e
+                await self._exponential_backoff(attempt)
+
+        raise SQLGenerationError(f"重试 {self.config.max_retries} 次后仍失败: {last_error}")
+
+    async def _exponential_backoff(self, attempt: int):
+        """指数退避延迟"""
+        delay = self.config.retry_base_delay * (2 ** attempt)
+        # 添加抖动（±25%）
+        import random
+        jitter = delay * 0.25 * (random.random() * 2 - 1)
+        await asyncio.sleep(delay + jitter)
 
     def _clean_sql_response(self, response: str) -> str:
         """清理 LLM 响应，提取纯 SQL"""
@@ -860,11 +1148,28 @@ class LLMService:
 
 ### 4.1 请求/响应模型
 
+统一的请求和响应模型定义，使用 UTC 时区时间戳。
+
 ```python
+# pg_mcp/models/request.py
+from pydantic import BaseModel, Field
+from typing import Literal
+
+ReturnMode = Literal["sql", "result", "both"]
+
+class QueryRequest(BaseModel):
+    """查询请求模型"""
+    query: str = Field(..., description="自然语言查询描述")
+    database: str | None = Field(None, description="目标数据库名称")
+    return_mode: ReturnMode = Field("both", description="返回模式")
+    limit: int = Field(100, ge=1, le=1000, description="结果行数限制")
+
+
 # pg_mcp/models/response.py
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 from typing import Any
+import uuid
 
 class QueryResultData(BaseModel):
     """查询结果数据"""
@@ -883,7 +1188,7 @@ class QueryMetadata(BaseModel):
     """查询元数据"""
     database: str
     execution_time_ms: int
-    generated_at: datetime = Field(default_factory=datetime.now)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class QueryResponseData(BaseModel):
     """查询响应数据"""
@@ -896,29 +1201,19 @@ class QueryResponse(BaseModel):
     """成功响应"""
     success: bool = True
     data: QueryResponseData | dict
-    request_id: str | None = None
+    request_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
-class ErrorDetail(BaseModel):
-    """错误详情"""
+class ErrorResponse(BaseModel):
+    """错误响应 - 统一格式"""
+    success: bool = False
     code: str
     message: str
     details: dict | None = None
-    suggestion: str | None = None
-
-class ErrorResponse(BaseModel):
-    """错误响应"""
-    success: bool = False
-    error: ErrorDetail | None = None
-    code: str | None = None  # 简化字段
-    message: str | None = None
-    details: dict | None = None
-    request_id: str | None = None
-    timestamp: datetime = Field(default_factory=datetime.now)
+    request_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     def model_dump(self, **kwargs):
-        """兼容简化格式"""
-        if self.error:
-            return super().model_dump(**kwargs)
+        """序列化为字典"""
         return {
             "success": False,
             "error": {
@@ -926,6 +1221,7 @@ class ErrorResponse(BaseModel):
                 "message": self.message,
                 "details": self.details
             },
+            "request_id": self.request_id,
             "timestamp": self.timestamp.isoformat()
         }
 ```
@@ -935,6 +1231,8 @@ class ErrorResponse(BaseModel):
 ## 5. 生命周期管理
 
 ### 5.1 服务启动流程
+
+使用依赖注入容器管理服务生命周期，支持启动失败时的资源清理。
 
 ```python
 # pg_mcp/__main__.py
@@ -946,47 +1244,63 @@ from pg_mcp.services.llm import LLMService
 from pg_mcp.services.executor import SQLExecutor
 from pg_mcp.services.schema import SchemaService
 from pg_mcp.security.validator import SQLValidator
-import pg_mcp.server as server_module
+from pg_mcp.context import AppContext, set_context
 
 @asynccontextmanager
 async def lifespan(app):
-    """应用生命周期管理"""
-    # === 启动阶段 ===
+    """应用生命周期管理（带失败清理）"""
+    executor = None
+    llm_service = None
 
-    # 1. 加载配置
-    settings = Settings()
-    server_module.settings = settings
+    try:
+        # === 启动阶段 ===
 
-    # 2. 初始化 SQL 校验器
-    validator = SQLValidator(settings.security)
-    server_module.validator = validator
+        # 1. 加载配置
+        settings = Settings()
 
-    # 3. 初始化数据库执行器
-    executor = SQLExecutor(settings.query)
-    await executor.initialize(settings.databases)
-    server_module.executor = executor
+        # 2. 初始化 SQL 校验器
+        validator = SQLValidator(settings.security)
 
-    # 4. 初始化 Schema 服务并发现 Schema
-    schema_service = SchemaService()
-    for db_config in settings.databases:
-        pool = executor._pools.get(db_config.name)
-        if pool:
-            await schema_service.discover(db_config.name, pool)
-    server_module.schema_service = schema_service
+        # 3. 初始化数据库执行器
+        executor = SQLExecutor(settings.query)
+        await executor.initialize(settings.databases)
 
-    # 5. 初始化 LLM 服务
-    llm_service = LLMService(settings.deepseek, schema_service)
-    server_module.llm_service = llm_service
+        # 4. 初始化 Schema 服务并发现 Schema
+        schema_service = SchemaService(settings.schema_cache)
+        for db_config in settings.databases:
+            pool = executor.get_pool(db_config.name)
+            if pool:
+                await schema_service.discover(db_config.name, pool)
 
-    print(f"✓ {settings.server_name} 启动完成")
-    print(f"  - 已连接数据库: {[db.name for db in settings.databases]}")
+        # 5. 初始化 LLM 服务
+        llm_service = LLMService(settings.deepseek, schema_service)
 
-    yield
+        # 6. 创建并设置应用上下文
+        ctx = AppContext(
+            settings=settings,
+            validator=validator,
+            executor=executor,
+            schema_service=schema_service,
+            llm_service=llm_service
+        )
+        set_context(ctx)
 
-    # === 关闭阶段 ===
-    await llm_service.close()
-    await executor.close()
-    print(f"✓ {settings.server_name} 已关闭")
+        print(f"✓ {settings.server_name} 启动完成")
+        print(f"  - 已连接数据库: {[db.name for db in settings.databases]}")
+
+        yield
+
+    except Exception as e:
+        print(f"✗ 启动失败: {e}")
+        raise
+
+    finally:
+        # === 关闭阶段（确保资源清理）===
+        if llm_service:
+            await llm_service.close()
+        if executor:
+            await executor.close()
+        print(f"✓ 服务已关闭")
 
 
 # 注册生命周期
@@ -1153,14 +1467,16 @@ if __name__ == "__main__":
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 7.2 SQLGlot 校验规则
+### 7.2 SQLGlot 校验规则（白名单模式）
 
 | 规则 | 检查内容 | 处理 |
 |------|----------|------|
-| 语句类型 | INSERT/UPDATE/DELETE/DROP/CREATE/ALTER | 拒绝 |
+| 顶层语句 | 必须是 SELECT 或 WITH (CTE) | 拒绝其他类型 |
+| AST 白名单 | 仅允许配置中列出的节点类型 | 拒绝未知节点 |
+| 危险语句 | INSERT/UPDATE/DELETE/DROP/CREATE/ALTER | 拒绝 |
+| 危险构造 | SELECT INTO, COPY, LOCK | 拒绝 |
 | 危险函数 | pg_sleep, lo_export, pg_read_file 等 | 拒绝 |
-| 子查询 | 子查询中的 DML/DDL | 拒绝 |
-| CTE | WITH 语句主体必须是 SELECT | 拒绝非 SELECT |
+| 子查询 | 递归检查所有子查询 | 应用相同规则 |
 
 ---
 
@@ -1200,11 +1516,13 @@ databases:
     is_default: true
 
 deepseek:
+  api_key: "${DEEPSEEK_API_KEY}"
   model: "deepseek-chat"
   temperature: 0.1
   max_tokens: 2000
   timeout_seconds: 30
   max_retries: 3
+  retry_base_delay: 1.0
 
 query:
   timeout_seconds: 30
@@ -1212,15 +1530,28 @@ query:
   max_rows_limit: 1000
   default_return_mode: "both"
 
+schema_cache:
+  ttl_minutes: 60
+  auto_refresh: true
+
 security:
-  allowed_statements:
-    - "SELECT"
+  allowed_statement_types:
+    - "Select"
   blocked_functions:
     - "pg_sleep"
     - "lo_export"
     - "lo_import"
     - "pg_read_file"
     - "pg_write_file"
+    - "pg_read_binary_file"
+    - "pg_ls_dir"
+    - "pg_stat_file"
+    - "pg_terminate_backend"
+    - "pg_cancel_backend"
+  blocked_constructs:
+    - "Into"
+    - "Copy"
+    - "Lock"
   enable_prompt_injection_check: true
 ```
 
@@ -1296,34 +1627,22 @@ def validator():
     return SQLValidator(SecurityConfig())
 
 class TestSQLValidator:
-    """SQL 安全校验测试"""
+    """SQL 安全校验测试（白名单模式）"""
 
-    def test_select_allowed(self, validator):
+    # === 允许的查询 ===
+
+    def test_simple_select_allowed(self, validator):
         result = validator.validate("SELECT * FROM users")
         assert result.is_safe
 
-    def test_insert_blocked(self, validator):
-        result = validator.validate("INSERT INTO users VALUES (1, 'test')")
-        assert not result.is_safe
-        assert "INSERT" in result.detected_issues[0]
+    def test_select_with_where_allowed(self, validator):
+        result = validator.validate("SELECT name FROM users WHERE id = 1")
+        assert result.is_safe
 
-    def test_delete_blocked(self, validator):
-        result = validator.validate("DELETE FROM users WHERE id = 1")
-        assert not result.is_safe
-
-    def test_drop_blocked(self, validator):
-        result = validator.validate("DROP TABLE users")
-        assert not result.is_safe
-
-    def test_dangerous_function_blocked(self, validator):
-        result = validator.validate("SELECT pg_sleep(10)")
-        assert not result.is_safe
-        assert "pg_sleep" in str(result.detected_issues)
-
-    def test_subquery_with_delete_blocked(self, validator):
-        sql = "SELECT * FROM (DELETE FROM users RETURNING *) AS deleted"
+    def test_select_with_join_allowed(self, validator):
+        sql = "SELECT u.name, o.total FROM users u JOIN orders o ON u.id = o.user_id"
         result = validator.validate(sql)
-        assert not result.is_safe
+        assert result.is_safe
 
     def test_cte_select_allowed(self, validator):
         sql = """
@@ -1348,6 +1667,73 @@ class TestSQLValidator:
         """
         result = validator.validate(sql)
         assert result.is_safe
+
+    # === 禁止的语句类型 ===
+
+    def test_insert_blocked(self, validator):
+        result = validator.validate("INSERT INTO users VALUES (1, 'test')")
+        assert not result.is_safe
+        assert any("INSERT" in issue or "Insert" in issue for issue in result.detected_issues)
+
+    def test_update_blocked(self, validator):
+        result = validator.validate("UPDATE users SET name = 'test' WHERE id = 1")
+        assert not result.is_safe
+
+    def test_delete_blocked(self, validator):
+        result = validator.validate("DELETE FROM users WHERE id = 1")
+        assert not result.is_safe
+
+    def test_drop_blocked(self, validator):
+        result = validator.validate("DROP TABLE users")
+        assert not result.is_safe
+
+    def test_truncate_blocked(self, validator):
+        result = validator.validate("TRUNCATE TABLE users")
+        assert not result.is_safe
+
+    # === 禁止的构造 ===
+
+    def test_select_into_blocked(self, validator):
+        result = validator.validate("SELECT * INTO new_table FROM users")
+        assert not result.is_safe
+        assert any("INTO" in issue for issue in result.detected_issues)
+
+    # === 禁止的函数 ===
+
+    def test_pg_sleep_blocked(self, validator):
+        result = validator.validate("SELECT pg_sleep(10)")
+        assert not result.is_safe
+        assert any("pg_sleep" in issue for issue in result.detected_issues)
+
+    def test_lo_export_blocked(self, validator):
+        result = validator.validate("SELECT lo_export(12345, '/tmp/file')")
+        assert not result.is_safe
+
+    def test_pg_read_file_blocked(self, validator):
+        result = validator.validate("SELECT pg_read_file('/etc/passwd')")
+        assert not result.is_safe
+
+    # === 子查询安全 ===
+
+    def test_subquery_with_delete_blocked(self, validator):
+        sql = "SELECT * FROM (DELETE FROM users RETURNING *) AS deleted"
+        result = validator.validate(sql)
+        assert not result.is_safe
+
+    def test_subquery_select_allowed(self, validator):
+        sql = "SELECT * FROM (SELECT id, name FROM users) AS subq"
+        result = validator.validate(sql)
+        assert result.is_safe
+
+    # === 边界情况 ===
+
+    def test_empty_sql_blocked(self, validator):
+        result = validator.validate("")
+        assert not result.is_safe
+
+    def test_invalid_sql_blocked(self, validator):
+        result = validator.validate("NOT VALID SQL AT ALL")
+        assert not result.is_safe
 ```
 
 ---
@@ -1398,5 +1784,6 @@ CMD ["python", "-m", "pg_mcp"]
 | 版本 | 日期 | 变更说明 |
 |------|------|----------|
 | 1.0.0 | 2026-02-23 | 初始版本 |
+| 1.1.0 | 2026-02-23 | 根据 Codex Review 反馈优化：<br>- 配置类改为 BaseModel（嵌套类）<br>- 添加 AppContext 依赖注入容器<br>- SQL 校验器改为白名单模式<br>- 添加类型化异常定义<br>- Schema 发现优化为批量查询（解决 N+1）<br>- 添加缓存 TTL 和自动刷新<br>- LLM 重试添加指数退避<br>- LIMIT 处理改为 AST 方式<br>- 统一错误响应格式<br>- 使用 UTC 时区时间戳<br>- 扩展测试用例覆盖 |
 
 
