@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "pg-mcp": {
+      "command": "python",
+      "args": ["-m", "pg_mcp"],
+      "env": {
+        "DEEPSEEK__API_KEY": "sk-xxx",
+        "DATABASES__0__NAME": "analytics",
+        "DATABASES__0__HOST": "localhost",
+        "DATABASES__0__PORT": "5432",
+        "DATABASES__0__DATABASE": "analytics",
+        "DATABASES__0__USERNAME": "readonly_user",
+        "DATABASES__0__PASSWORD": "your_password",
+        "DATABASES__0__IS_DEFAULT": "true"
+      }
+    }
+  }
+}
+

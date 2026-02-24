@@ -3,7 +3,14 @@
 import pytest
 from pydantic import SecretStr
 
-from pg_mcp.config.settings import DatabaseConfig, QueryConfig, SchemaCacheConfig, SecurityConfig
+from pg_mcp.config.settings import (
+    DatabaseConfig,
+    DeepSeekConfig,
+    QueryConfig,
+    SchemaCacheConfig,
+    SecurityConfig,
+    Settings,
+)
 
 
 @pytest.fixture
@@ -39,3 +46,18 @@ def security_config() -> SecurityConfig:
     """Default security config for validator tests."""
     return SecurityConfig()
 
+
+@pytest.fixture
+def deepseek_config() -> DeepSeekConfig:
+    """Default deepseek config for tests."""
+    return DeepSeekConfig(api_key=SecretStr("sk-test"))
+
+
+@pytest.fixture
+def settings_fixture(sample_database_config: DatabaseConfig) -> Settings:
+    """Reusable full settings object."""
+    return Settings(
+        _env_file=None,
+        deepseek={"api_key": "sk-test"},
+        databases=[sample_database_config.model_dump(mode="json")],
+    )
