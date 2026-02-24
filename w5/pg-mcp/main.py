@@ -1,11 +1,6 @@
-from fastmcp import FastMCP
+"""Compatibility launcher for the packaged module entrypoint."""
 
-mcp = FastMCP("Demo python🚀")
-
-@mcp.tool
-def add(a: int, b: int) -> int:
-    """Add two numbers"""
-    return a + b
+from pg_mcp.__main__ import main
 
 if __name__ == "__main__":
-    mcp.run()
+    main()
