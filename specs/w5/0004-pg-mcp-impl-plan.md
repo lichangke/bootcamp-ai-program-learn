@@ -21,7 +21,7 @@
 1. **基础层优先**：先搭建项目骨架、配置管理、异常定义等无外部依赖的模块
 2. **核心服务层**：实现 SQL 校验器、数据库执行器、Schema 服务等核心业务逻辑
 3. **集成层**：实现 LLM 服务、FastMCP Tool 注册、生命周期管理
-4. **端到端验证**：集成测试、手动验证、Docker 部署
+4. **端到端验证**：集成测试、手动验证、客户端配置验证
 
 ### 1.3 技术栈确认
 
@@ -56,7 +56,7 @@
 | P6 | LLM 服务 | DeepSeek 集成 + 重试 | P4, P5 |
 | P7 | 应用上下文与生命周期 | AppContext + lifespan | P2-P6 |
 | P8 | FastMCP Tool 注册 | query_database Tool | P7 |
-| P9 | 集成测试与端到端验证 | E2E 测试 + Docker | P8 |
+| P9 | 集成测试与端到端验证 | E2E 测试 + 配置示例 | P8 |
 
 ---
 
@@ -726,32 +726,22 @@ def _get_database_config(ctx, db_name: str):
 
 #### T9.1 搭建集成测试环境
 
-- 创建 `docker-compose.test.yml`，包含 PostgreSQL 测试实例
+- 准备独立 PostgreSQL 测试实例（本地或 CI service）
 - 创建测试数据库初始化脚本（建表、插入测试数据）
 - 配置 `.env.test` 测试环境变量
 
-```yaml
-# docker-compose.test.yml
-services:
-  postgres-test:
-    image: postgres:16
-    environment:
-      POSTGRES_DB: test_db
-      POSTGRES_USER: test_user
-      POSTGRES_PASSWORD: test_pass
-    ports:
-      - "5433:5432"
-    volumes:
-      - ./tests/fixtures/init.sql:/docker-entrypoint-initdb.d/init.sql
+```bash
+# 初始化测试库
+psql -h 127.0.0.1 -p 5433 -U test_user -d test_db -f tests/fixtures/init.sql
 ```
 
 验收标准：
-- `docker compose -f docker-compose.test.yml up -d` 启动测试数据库
+- 测试数据库可连接并完成初始化脚本导入
 - 测试数据库包含至少 2 张表、有外键关系、有注释
 
 #### T9.2 编写端到端集成测试
 
-使用真实 PostgreSQL（Docker）+ mock LLM API 进行端到端测试：
+使用真实 PostgreSQL + mock LLM API 进行端到端测试：
 
 | 测试场景 | 验证点 |
 |----------|--------|
@@ -763,27 +753,10 @@ services:
 | 完整流程 | NL → SQL → 校验 → 执行 → 响应 |
 
 验收标准：
-- `pytest tests/integration/` 全部通过（需 Docker 环境）
+- `pytest tests/integration/` 全部通过（需可访问的 PostgreSQL 测试实例）
 - 端到端流程无阻塞
 
-#### T9.3 创建 Docker 部署配置
-
-按设计文档 §11.2 创建生产 Dockerfile：
-
-```dockerfile
-FROM python:3.12-slim
-WORKDIR /app
-COPY . .
-RUN pip install --no-cache-dir .
-ENV PYTHONUNBUFFERED=1
-CMD ["python", "-m", "pg_mcp"]
-```
-
-验收标准：
-- `docker build -t pg-mcp .` 成功构建
-- `docker run pg-mcp` 可启动（需配置环境变量）
-
-#### T9.4 创建 Claude Desktop 配置示例
+#### T9.3 创建 Claude Desktop 配置示例
 
 按设计文档 §8.3 创建配置示例文件：
 
@@ -835,7 +808,7 @@ T7.1 ─── T7.2 ─── T7.3
 T8.1 ─── T8.2
        │
        ▼
-T9.1 ─── T9.2 ─── T9.3 ─── T9.4
+T9.1 ─── T9.2 ─── T9.3
 ```
 
 关键路径：T0 → T1 → T3 → T4 → T6 → T7 → T8 → T9
@@ -843,7 +816,7 @@ T9.1 ─── T9.2 ─── T9.3 ─── T9.4
 可并行的任务组：
 - T2（SQL 校验器）与 T3（数据库执行器）可并行
 - T5（数据模型）与 T3/T4 可并行
-- T9.3（Docker）与 T9.4（配置示例）可并行
+- T9.2（集成测试）与 T9.3（配置示例）可并行
 
 ---
 
@@ -891,7 +864,6 @@ T9.1 ─── T9.2 ─── T9.3 ─── T9.4
 - [ ] `ruff check .` 无报错
 - [ ] 所有 Pydantic 模型类型安全
 - [ ] 异步资源正确关闭（无泄漏）
-- [ ] Docker 镜像可正常构建和运行
 
 ---
 

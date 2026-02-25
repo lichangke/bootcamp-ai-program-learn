@@ -6,7 +6,7 @@ Read-only PostgreSQL MCP server that converts natural language to SQL, validates
 
 - Python 3.12+
 - `uv` (recommended) or `pip`
-- Optional for integration tests: Docker + Docker Compose
+- Optional for integration tests: local PostgreSQL instance
 
 ## Local setup
 
@@ -31,22 +31,12 @@ on first query per database.
 ## Integration tests (P9)
 
 ```bash
-docker compose -f docker-compose.test.yml up -d
+# 1) prepare test database and schema data
+#    psql -h 127.0.0.1 -p 5433 -U test_user -d test_db -f tests/fixtures/init.sql
+
+# 2) run integration tests
 set PG_MCP_RUN_INTEGRATION=1
 uv run python -m pytest -q tests/integration
-```
-
-To stop the test database:
-
-```bash
-docker compose -f docker-compose.test.yml down -v
-```
-
-## Docker image
-
-```bash
-docker build -t pg-mcp .
-docker run --rm pg-mcp
 ```
 
 ## Claude Desktop example

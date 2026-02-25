@@ -48,8 +48,8 @@
 | 环境 | 用途 | 配置 |
 |------|------|------|
 | 本地开发 | 单元测试、快速迭代 | Python 3.12 + pytest + mock |
-| CI/CD | 自动化测试 | GitHub Actions + PostgreSQL 容器 |
-| 集成测试 | 真实数据库交互 | Docker Compose (PostgreSQL 16) |
+| CI/CD | 自动化测试 | GitHub Actions + PostgreSQL service |
+| 集成测试 | 真实数据库交互 | PostgreSQL 16 测试实例 |
 | E2E 测试 | 完整 MCP 协议验证 | MCP Inspector + 真实 Claude Desktop |
 
 ---
@@ -65,7 +65,7 @@
 | pytest-cov | ≥ 4.1.0 | 代码覆盖率统计 |
 | pytest-mock | ≥ 3.12.0 | Mock/Spy 工具 |
 | httpx-mock | ≥ 0.12.0 | HTTP 请求 Mock |
-| testcontainers | ≥ 4.0.0 | Docker 容器管理 |
+| postgresql-client | ≥ 14 | 测试数据库初始化（可选） |
 | faker | ≥ 22.0.0 | 测试数据生成 |
 
 ### 2.2 辅助工具
@@ -518,13 +518,13 @@ class TestQueryRequest:
 
 #### 测试套件: TestDatabaseIntegration
 
-**测试环境:** 使用 testcontainers 启动真实 PostgreSQL 容器
+**测试环境:** 使用独立 PostgreSQL 测试实例（本地或 CI service）
 
 **测试用例:**
 
 | 用例 ID | 测试场景 | 前置条件 | 验证点 | 优先级 |
 |---------|---------|---------|--------|--------|
-| IT-DB-001 | 连接池生命周期 | PostgreSQL 容器 | 连接创建/关闭 | P0 |
+| IT-DB-001 | 连接池生命周期 | PostgreSQL 测试实例 | 连接创建/关闭 | P0 |
 | IT-DB-002 | 真实查询执行 | 测试数据 | 返回正确结果 | P0 |
 | IT-DB-003 | 事务只读验证 | 尝试写操作 | 抛出异常 | P0 |
 | IT-DB-004 | 并发查询处理 | 50 个并发请求 | 全部成功 | P1 |
@@ -536,41 +536,40 @@ class TestQueryRequest:
 ```python
 # tests/integration/test_database.py
 import pytest
-from testcontainers.postgres import PostgresContainer
 from pg_mcp.services.executor import SQLExecutor
-from pg_mcp.config.settings import DatabaseConfig
-
-@pytest.fixture(scope="module")
-def postgres_container():
-    with PostgresContainer("postgres:16") as postgres:
-        yield postgres
+from pydantic import SecretStr
+from pg_mcp.config.settings import DatabaseConfig, QueryConfig
 
 @pytest.fixture
-async def executor(postgres_container):
+async def executor():
+    query_config = QueryConfig(timeout_seconds=3, max_rows=100, max_rows_limit=1000)
     config = DatabaseConfig(
-        host=postgres_container.get_container_host_ip(),
-        port=postgres_container.get_exposed_port(5432),
-        database=postgres_container.dbname,
-        user=postgres_container.username,
-        password=postgres_container.password
+        name="test_db",
+        host="127.0.0.1",
+        port=5433,
+        database="test_db",
+        username="test_user",
+        password=SecretStr("test_pass"),
+        is_default=True,
     )
-    executor = SQLExecutor(config)
-    await executor.initialize()
+    executor = SQLExecutor(query_config)
+    await executor.initialize([config])
     yield executor
     await executor.close()
 
 @pytest.mark.asyncio
-async def test_real_query_execution(executor, postgres_container):
+async def test_real_query_execution(executor):
     """IT-DB-002: 真实查询执行"""
-    # 创建测试表
-    conn = await postgres_container.get_connection()
-    await conn.execute("CREATE TABLE test_users (id INT, name TEXT)")
-    await conn.execute("INSERT INTO test_users VALUES (1, 'Alice'), (2, 'Bob')")
+    # 创建测试数据
+    pool = executor.get_pool("test_db")
+    async with pool.acquire() as conn:
+        await conn.execute("CREATE TABLE test_users (id INT, name TEXT)")
+        await conn.execute("INSERT INTO test_users VALUES (1, 'Alice'), (2, 'Bob')")
 
     # 执行查询
-    result = await executor.execute("SELECT * FROM test_users ORDER BY id")
-    assert len(result) == 2
-    assert result[0]["name"] == "Alice"
+    result = await executor.execute("test_db", "SELECT * FROM test_users ORDER BY id", limit=10)
+    assert result.row_count == 2
+    assert result.rows[0][1] == "Alice"
 ```
 
 ### 4.2 Schema 发现集成测试
@@ -899,19 +898,25 @@ jobs:
 ```python
 # tests/conftest.py
 import pytest
-from testcontainers.postgres import PostgresContainer
+import asyncpg
 
 @pytest.fixture(scope="session")
-def postgres_container():
-    """全局 PostgreSQL 容器"""
-    with PostgresContainer("postgres:16") as postgres:
-        yield postgres
+async def pg_conn():
+    """全局 PostgreSQL 连接"""
+    conn = await asyncpg.connect(
+        host="127.0.0.1",
+        port=5433,
+        database="test_db",
+        user="test_user",
+        password="test_pass",
+    )
+    yield conn
+    await conn.close()
 
 @pytest.fixture
-async def test_database(postgres_container):
+async def test_database(pg_conn):
     """测试数据库初始化"""
-    conn = await postgres_container.get_connection()
-    await conn.execute("""
+    await pg_conn.execute("""
         CREATE TABLE users (
             id SERIAL PRIMARY KEY,
             name VARCHAR(100),
@@ -919,14 +924,14 @@ async def test_database(postgres_container):
             age INT
         )
     """)
-    await conn.execute("""
+    await pg_conn.execute("""
         INSERT INTO users (name, email, age) VALUES
         ('Alice', 'alice@example.com', 25),
         ('Bob', 'bob@example.com', 30),
         ('Charlie', 'charlie@example.com', 35)
     """)
-    yield conn
-    await conn.execute("DROP TABLE users")
+    yield pg_conn
+    await pg_conn.execute("DROP TABLE users")
 ```
 
 ---
@@ -1013,7 +1018,7 @@ async def test_database(postgres_container):
 pip install -e ".[dev]"
 
 # 安装额外工具
-pip install testcontainers bandit locust
+pip install bandit locust
 ```
 
 ### 12.2 运行测试命令
@@ -1056,4 +1061,3 @@ pytest tests/performance -v -m performance
 | 版本 | 日期 | 变更说明 |
 |------|------|----------|
 | 1.0.0 | 2026-02-24 | 初始版本，覆盖单元/集成/E2E/安全/性能测试 |
-
