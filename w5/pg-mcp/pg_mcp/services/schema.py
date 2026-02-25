@@ -1,11 +1,13 @@
 """Schema discovery + cache service."""
 
+import logging
 from datetime import UTC, datetime, timedelta
 
 import asyncpg
 
 from pg_mcp.config.settings import SchemaCacheConfig
 from pg_mcp.models.schema import ColumnInfo, SchemaInfo, TableInfo
+from pg_mcp.request_context import get_request_id
 
 SCHEMA_DISCOVERY_SQL = """
 WITH user_tables AS (
@@ -74,6 +76,8 @@ LEFT JOIN primary_keys pk
 ORDER BY c.table_schema, c.table_name, c.ordinal_position;
 """
 
+logger = logging.getLogger(__name__)
+
 
 class SchemaService:
     """Manage schema discovery and in-memory TTL cache."""
@@ -84,6 +88,14 @@ class SchemaService:
 
     async def discover(self, db_name: str, pool: asyncpg.Pool) -> SchemaInfo:
         """Fetch full database schema in one SQL round trip."""
+        logger.info(
+            "schema_discover_start",
+            extra={
+                "event": "schema_discover_start",
+                "request_id": get_request_id(),
+                "database": db_name,
+            },
+        )
         async with pool.acquire() as conn:
             rows = await conn.fetch(SCHEMA_DISCOVERY_SQL)
 
@@ -130,6 +142,15 @@ class SchemaService:
             cached_at=datetime.now(UTC),
         )
         self._cache[db_name] = schema_info
+        logger.info(
+            "schema_discover_success",
+            extra={
+                "event": "schema_discover_success",
+                "request_id": get_request_id(),
+                "database": db_name,
+                "table_count": len(tables),
+            },
+        )
         return schema_info
 
     async def get_schema(self, db_name: str, pool: asyncpg.Pool | None = None) -> SchemaInfo | None:
@@ -140,6 +161,14 @@ class SchemaService:
                 try:
                     return await self.discover(db_name, pool)
                 except Exception:
+                    logger.warning(
+                        "schema_discover_failed",
+                        extra={
+                            "event": "schema_discover_failed",
+                            "request_id": get_request_id(),
+                            "database": db_name,
+                        },
+                    )
                     return None
             return None
 
@@ -150,6 +179,14 @@ class SchemaService:
             try:
                 return await self.discover(db_name, pool)
             except Exception:
+                logger.warning(
+                    "schema_refresh_failed",
+                    extra={
+                        "event": "schema_refresh_failed",
+                        "request_id": get_request_id(),
+                        "database": db_name,
+                    },
+                )
                 return cached
 
         return cached

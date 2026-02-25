@@ -39,11 +39,17 @@ def test_query_response_request_id_generated() -> None:
 
 def test_error_response_custom_dump_shape() -> None:
     """ErrorResponse model_dump should expose unified nested error structure."""
-    response = ErrorResponse(code="DB_NOT_FOUND", message="missing db", details={"database": "analytics"})
+    response = ErrorResponse(
+        code="DB_NOT_FOUND",
+        message="missing db",
+        details={"database": "analytics"},
+        request_id="req-1",
+    )
     dumped = response.model_dump()
     assert dumped["success"] is False
     assert dumped["error"]["code"] == "DB_NOT_FOUND"
     assert dumped["error"]["details"]["database"] == "analytics"
+    assert dumped["request_id"] == "req-1"
     assert "timestamp" in dumped
 
 
@@ -57,4 +63,3 @@ def test_query_result_data_shape() -> None:
         execution_time_ms=5,
     )
     assert result.row_count == len(result.rows)
-

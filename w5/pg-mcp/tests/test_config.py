@@ -13,6 +13,8 @@ def test_settings_defaults_when_minimal_valid_input() -> None:
     assert settings.server_name == "pg-mcp-server"
     assert settings.log_level == "INFO"
     assert settings.query.max_rows == 100
+    assert settings.query.connect_max_retries == 2
+    assert settings.query.max_concurrent_requests == 0
     assert settings.schema_cache.ttl_minutes == 60
     assert settings.schema_cache.preload_on_startup is False
     assert settings.databases == []

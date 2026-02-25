@@ -4,7 +4,15 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from pg_mcp.context import AppContext, clear_context, get_context, set_context
+from pg_mcp.context import (
+    AppContext,
+    clear_context,
+    get_context,
+    get_request_id,
+    reset_request_id,
+    set_context,
+    set_request_id,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -51,3 +59,11 @@ async def test_app_context_close_closes_services(settings_fixture) -> None:
     llm_service.close.assert_awaited_once()
     executor.close.assert_awaited_once()
 
+
+def test_request_id_context_helpers() -> None:
+    """set_request_id/reset_request_id should bind and restore request scope."""
+    assert get_request_id() is None
+    token = set_request_id("req-xyz")
+    assert get_request_id() == "req-xyz"
+    reset_request_id(token)
+    assert get_request_id() is None

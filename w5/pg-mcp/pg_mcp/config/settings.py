@@ -39,6 +39,11 @@ class QueryConfig(BaseModel):
     max_rows: int = 100
     max_rows_limit: int = 1000
     default_return_mode: str = "both"
+    connect_max_retries: int = 2
+    connect_retry_base_delay: float = 0.5
+    max_concurrent_requests: int = 0
+    rate_limit_per_minute: int = 0
+    rate_limit_window_seconds: int = 60
 
 
 class SchemaCacheConfig(BaseModel):

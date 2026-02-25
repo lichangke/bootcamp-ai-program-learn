@@ -8,6 +8,7 @@ from pg_mcp.exceptions.errors import (
     PgMcpError,
     QueryExecutionError,
     QueryTimeoutError,
+    RateLimitExceededError,
     SchemaNotReadyError,
     SecurityViolationError,
     SQLGenerationError,
@@ -20,9 +21,9 @@ __all__ = [
     "InvalidInputError",
     "PgMcpError",
     "QueryExecutionError",
+    "RateLimitExceededError",
     "QueryTimeoutError",
     "SQLGenerationError",
     "SchemaNotReadyError",
     "SecurityViolationError",
 ]
-

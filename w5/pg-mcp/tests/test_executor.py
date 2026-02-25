@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, Mock
 import asyncpg
 import pytest
 
-from pg_mcp.exceptions.errors import DatabaseNotFoundError, QueryTimeoutError
+from pg_mcp.exceptions.errors import DatabaseConnectionError, DatabaseNotFoundError, QueryTimeoutError
 from pg_mcp.services.executor import QueryResult, SQLExecutor
 
 
@@ -78,6 +78,49 @@ async def test_initialize_and_close_pools(
 
     await executor.close()
     fake_pool.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_initialize_retries_pool_creation_then_succeeds(
+    query_config,
+    sample_database_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Transient connection failures should be retried within bounded attempts."""
+    query_config.connect_max_retries = 2
+    query_config.connect_retry_base_delay = 0.01
+    executor = SQLExecutor(query_config)
+    fake_pool = AsyncMock()
+    create_pool = AsyncMock(side_effect=[RuntimeError("temporary"), fake_pool])
+    sleep = AsyncMock()
+
+    monkeypatch.setattr("pg_mcp.services.executor.asyncpg.create_pool", create_pool)
+    monkeypatch.setattr("pg_mcp.services.executor.asyncio.sleep", sleep)
+
+    await executor.initialize([sample_database_config])
+    assert executor.get_pool(sample_database_config.name) is fake_pool
+    assert create_pool.await_count == 2
+    sleep.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_initialize_records_unhealthy_database_without_raising(
+    query_config,
+    sample_database_config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Failed DB init should degrade gracefully and mark DB unhealthy."""
+    query_config.connect_max_retries = 0
+    executor = SQLExecutor(query_config)
+    create_pool = AsyncMock(side_effect=RuntimeError("connection refused"))
+    monkeypatch.setattr("pg_mcp.services.executor.asyncpg.create_pool", create_pool)
+
+    await executor.initialize([sample_database_config])
+
+    assert executor.healthy_databases() == []
+    assert sample_database_config.name in executor.unhealthy_databases()
+    with pytest.raises(DatabaseConnectionError):
+        executor.get_pool(sample_database_config.name)
 
 
 def test_get_pool_raises_for_unknown_db(query_config) -> None:

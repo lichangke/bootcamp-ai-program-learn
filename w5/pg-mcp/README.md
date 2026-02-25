@@ -28,6 +28,12 @@ For MCP clients with strict startup handshake limits, keep
 `SCHEMA_CACHE__PRELOAD_ON_STARTUP=false` (default). Schema is lazily discovered
 on first query per database.
 
+The server now supports:
+
+- JSON structured logs with end-to-end `request_id`
+- bounded DB pool init retries with degraded startup for partially unhealthy DBs
+- optional in-process query rate limiting (`QUERY__MAX_CONCURRENT_REQUESTS`, `QUERY__RATE_LIMIT_PER_MINUTE`)
+
 ## Integration tests (P9)
 
 ```bash

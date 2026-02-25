@@ -89,6 +89,8 @@ Copy-Item .env.example .env
 - 只设置一个默认库：例如 `DATABASES__0__IS_DEFAULT=true`
 - `SCHEMA_CACHE__PRELOAD_ON_STARTUP=false` 建议保持默认（可避免 MCP 客户端启动握手超时）
 - `QUERY__MAX_ROWS=100`、`QUERY__MAX_ROWS_LIMIT=1000` 这类限制建议保留
+- 可选：`QUERY__CONNECT_MAX_RETRIES`、`QUERY__CONNECT_RETRY_BASE_DELAY`（数据库连接重试/退避）
+- 可选：`QUERY__MAX_CONCURRENT_REQUESTS`、`QUERY__RATE_LIMIT_PER_MINUTE`（服务级限流）
 
 ## 5. 先本地试启动一次（可选但强烈推荐）
 
@@ -278,4 +280,3 @@ uv run python -m pytest -q
 $env:PG_MCP_RUN_INTEGRATION="1"
 uv run python -m pytest -q tests/integration
 ```
-

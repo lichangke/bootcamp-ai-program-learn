@@ -1,6 +1,7 @@
 """DeepSeek LLM service for natural-language-to-SQL generation."""
 
 import asyncio
+import logging
 import random
 import re
 
@@ -9,16 +10,19 @@ import httpx
 from pg_mcp.config.settings import DeepSeekConfig
 from pg_mcp.exceptions.errors import SQLGenerationError
 from pg_mcp.models.schema import SchemaInfo
+from pg_mcp.request_context import get_request_id
 from pg_mcp.services.schema import SchemaService
 
-SYSTEM_PROMPT = """你是一个 PostgreSQL SQL 专家。根据用户的自然语言描述和数据库 Schema 信息，生成对应的 SQL 查询语句。
+SYSTEM_PROMPT = """你是一个 PostgreSQL SQL 专家。
+请根据用户的自然语言问题和数据库 Schema 信息生成 SQL。
 规则：
-1. 只生成 SELECT 查询语句，禁止任何数据修改操作
+1. 仅允许生成 SELECT 查询
 2. 使用标准 PostgreSQL 语法
-3. 只返回 SQL 语句，不要包含任何解释或 markdown 格式
-4. 如果用户请求涉及数据修改，返回 "ERROR: 仅支持查询操作"
-5. 合理使用 JOIN、GROUP BY、ORDER BY 等子句
-6. 对于模糊的查询，做出合理的假设并生成 SQL"""
+3. 只返回 SQL 本文，不要 markdown 或解释
+4. 如果用户意图是写操作，返回以 ERROR: 开头的错误文本
+"""
+
+logger = logging.getLogger(__name__)
 
 
 class LLMService:
@@ -38,10 +42,32 @@ class LLMService:
 
     async def generate_sql(self, natural_query: str, schema_info: SchemaInfo, dialect: str = "postgres") -> str:
         """Generate SQL from natural-language query and discovered schema."""
+        request_id = get_request_id()
+        logger.info(
+            "llm_generate_start",
+            extra={
+                "event": "llm_generate_start",
+                "request_id": request_id,
+                "database": schema_info.database,
+                "query_length": len(natural_query),
+            },
+        )
+
         schema_text = self.schema_service.format_for_llm(schema_info)
         user_message = self._build_user_message(natural_query=natural_query, schema_text=schema_text, dialect=dialect)
         raw = await self._call_api_with_retry(user_message=user_message)
-        return self._clean_sql_response(raw)
+        sql = self._clean_sql_response(raw)
+
+        logger.info(
+            "llm_generate_success",
+            extra={
+                "event": "llm_generate_success",
+                "request_id": request_id,
+                "database": schema_info.database,
+                "sql_length": len(sql),
+            },
+        )
+        return sql
 
     async def _call_api_with_retry(self, user_message: str) -> str:
         """Call DeepSeek with exponential-backoff retries for transient failures."""
@@ -65,6 +91,16 @@ class LLMService:
 
                 if status_code >= 400:
                     if self._is_retryable_status(status_code) and attempt < self.config.max_retries:
+                        logger.warning(
+                            "llm_retry_status",
+                            extra={
+                                "event": "llm_retry_status",
+                                "request_id": get_request_id(),
+                                "attempt": attempt + 1,
+                                "max_retries": self.config.max_retries,
+                                "status_code": status_code,
+                            },
+                        )
                         await asyncio.sleep(self._exponential_backoff(attempt))
                         continue
                     raise SQLGenerationError(f"DeepSeek API request failed with status {status_code}.")
@@ -86,11 +122,29 @@ class LLMService:
                 last_error = exc
                 if attempt >= self.config.max_retries:
                     break
+                logger.warning(
+                    "llm_retry_transport",
+                    extra={
+                        "event": "llm_retry_transport",
+                        "request_id": get_request_id(),
+                        "attempt": attempt + 1,
+                        "max_retries": self.config.max_retries,
+                        "reason": str(exc),
+                    },
+                )
                 await asyncio.sleep(self._exponential_backoff(attempt))
             except Exception as exc:
                 last_error = exc
                 break
 
+        logger.error(
+            "llm_generate_failed",
+            extra={
+                "event": "llm_generate_failed",
+                "request_id": get_request_id(),
+                "reason": str(last_error) if last_error else "unknown",
+            },
+        )
         raise SQLGenerationError(str(last_error) if last_error else "Unknown LLM failure.")
 
     def _exponential_backoff(self, attempt: int) -> float:
@@ -125,10 +179,9 @@ class LLMService:
     def _build_user_message(natural_query: str, schema_text: str, dialect: str) -> str:
         """Build final user prompt including schema context and SQL dialect."""
         return (
-            "数据库 Schema 信息：\n"
+            "Database schema information:\n"
             f"{schema_text}\n\n"
-            f"SQL 方言：{dialect}\n"
-            f"用户查询：{natural_query}\n\n"
-            "请生成对应的 SQL 查询语句："
+            f"SQL dialect: {dialect}\n"
+            f"User query: {natural_query}\n\n"
+            "Please generate the corresponding SQL query."
         )
-

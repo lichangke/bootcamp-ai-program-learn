@@ -112,3 +112,14 @@ class InvalidInputError(PgMcpError):
             message,
             details,
         )
+
+
+class RateLimitExceededError(PgMcpError):
+    """Raised when request exceeds configured service rate limits."""
+
+    def __init__(self, message: str = "Rate limit exceeded.", details: dict[str, Any] | None = None):
+        super().__init__(
+            ErrorCode.RATE_LIMIT_EXCEEDED,
+            message,
+            details,
+        )

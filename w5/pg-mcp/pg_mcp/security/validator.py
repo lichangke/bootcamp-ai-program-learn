@@ -1,5 +1,6 @@
 """SQL safety validator based on SQLGlot AST."""
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -7,6 +8,9 @@ import sqlglot
 from sqlglot import exp
 
 from pg_mcp.config.settings import SecurityConfig
+from pg_mcp.request_context import get_request_id
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -70,11 +74,26 @@ class SQLValidator:
 
         unique_issues = sorted(set(issues))
         if unique_issues:
+            logger.warning(
+                "sql_validation_failed",
+                extra={
+                    "event": "sql_validation_failed",
+                    "request_id": get_request_id(),
+                    "issue_count": len(unique_issues),
+                },
+            )
             return ValidationResult(
                 is_safe=False,
                 message="Detected non-read-only operation; only SELECT-like queries are allowed.",
                 detected_issues=unique_issues,
             )
+        logger.info(
+            "sql_validation_passed",
+            extra={
+                "event": "sql_validation_passed",
+                "request_id": get_request_id(),
+            },
+        )
         return ValidationResult(is_safe=True, message="Validation passed.")
 
     def _check_top_level_statement(self, stmt: exp.Expression) -> list[str]:

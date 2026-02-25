@@ -8,6 +8,7 @@ from pg_mcp.context import AppContext, clear_context, set_context
 from pg_mcp.exceptions.errors import ErrorCode, QueryTimeoutError, SQLGenerationError
 from pg_mcp.security.validator import ValidationResult
 from pg_mcp.server import query_database
+from pg_mcp.services.rate_limiter import QueryRateLimiter
 
 
 @pytest.fixture(autouse=True)
@@ -184,3 +185,32 @@ async def test_tool_unexpected_error_returns_generic(settings_fixture) -> None:
     result = await query_database("show users")
     assert result["success"] is False
     assert result["error"]["code"] == ErrorCode.QUERY_EXECUTION_ERROR.value
+    assert result["request_id"]
+
+
+@pytest.mark.asyncio
+async def test_tool_rate_limit_exceeded(settings_fixture) -> None:
+    """Rate limiter should map overflow to RATE_LIMIT_EXCEEDED error."""
+    ctx = _build_context(settings_fixture)
+    ctx.rate_limiter = QueryRateLimiter(rate_limit_per_minute=1, window_seconds=60)
+    ctx.schema_service.get_schema.return_value = Mock()
+    ctx.llm_service.generate_sql.return_value = "SELECT * FROM users"
+    ctx.validator.validate.return_value = ValidationResult(is_safe=True, message="ok")
+    ctx.executor.execute.return_value = Mock(
+        model_dump=lambda: {
+            "columns": ["id"],
+            "rows": [[1]],
+            "row_count": 1,
+            "truncated": False,
+            "execution_time_ms": 5,
+        },
+        execution_time_ms=5,
+    )
+    set_context(ctx)
+
+    first = await query_database("show users")
+    second = await query_database("show users")
+
+    assert first["success"] is True
+    assert second["success"] is False
+    assert second["error"]["code"] == ErrorCode.RATE_LIMIT_EXCEEDED.value

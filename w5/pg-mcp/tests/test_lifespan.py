@@ -25,6 +25,8 @@ async def test_lifespan_initializes_and_closes(monkeypatch: pytest.MonkeyPatch, 
     executor.initialize = AsyncMock()
     executor.close = AsyncMock()
     executor.get_pool.return_value = Mock()
+    executor.healthy_databases.return_value = ["default"]
+    executor.unhealthy_databases.return_value = {}
     schema_service = Mock()
     schema_service.discover = AsyncMock()
     llm_service = Mock()
@@ -58,6 +60,8 @@ async def test_lifespan_cleanup_on_start_failure(monkeypatch: pytest.MonkeyPatch
     executor.initialize = AsyncMock()
     executor.close = AsyncMock()
     executor.get_pool.return_value = Mock()
+    executor.healthy_databases.return_value = ["default"]
+    executor.unhealthy_databases.return_value = {}
     schema_service = Mock()
     schema_service.discover = AsyncMock(side_effect=RuntimeError("discover failed"))
 

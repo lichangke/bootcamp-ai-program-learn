@@ -56,6 +56,7 @@ class ErrorResponse(BaseModel):
     code: str
     message: str
     details: dict = Field(default_factory=dict)
+    request_id: str | None = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     def model_dump(self, *args, **kwargs) -> dict:
@@ -68,6 +69,6 @@ class ErrorResponse(BaseModel):
                 "message": self.message,
                 "details": self.details,
             },
+            "request_id": self.request_id,
             "timestamp": self.timestamp.isoformat(),
         }
-
