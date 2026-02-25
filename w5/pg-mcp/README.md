@@ -42,3 +42,7 @@ uv run python -m pytest -q tests/integration
 ## Claude Desktop example
 
 See `claude_desktop_config.example.json`.
+
+## Codex usage guide
+
+See `docs/CODEX_USAGE.md` for full setup, MCP registration, and headless verification steps.
