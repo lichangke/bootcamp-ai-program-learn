@@ -86,6 +86,28 @@ async def test_get_schema_returns_none_when_missing(schema_cache_config) -> None
 
 
 @pytest.mark.asyncio
+async def test_get_schema_lazy_discovers_on_cache_miss(schema_cache_config) -> None:
+    """Cache miss should discover schema when pool is provided and auto_refresh is enabled."""
+    service = SchemaService(schema_cache_config)
+    discovered = SchemaInfo(database="analytics", tables=[], cached_at=datetime.now(UTC))
+    service.discover = AsyncMock(return_value=discovered)  # type: ignore[method-assign]
+
+    result = await service.get_schema("analytics", pool=AsyncMock())
+    assert result is discovered
+    service.discover.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_schema_lazy_discover_failure_returns_none(schema_cache_config) -> None:
+    """Cache miss should return None if lazy discovery fails."""
+    service = SchemaService(schema_cache_config)
+    service.discover = AsyncMock(side_effect=RuntimeError("db unavailable"))  # type: ignore[method-assign]
+
+    result = await service.get_schema("analytics", pool=AsyncMock())
+    assert result is None
+
+
+@pytest.mark.asyncio
 async def test_get_schema_hits_cache_when_not_expired(schema_cache_config) -> None:
     """Fresh cache should return stored schema directly."""
     service = SchemaService(schema_cache_config)

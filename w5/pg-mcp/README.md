@@ -24,6 +24,10 @@ uv run python -m pg_mcp
 
 The server reads runtime configuration from `.env` or nested env vars (see `.env.example`).
 
+For MCP clients with strict startup handshake limits, keep
+`SCHEMA_CACHE__PRELOAD_ON_STARTUP=false` (default). Schema is lazily discovered
+on first query per database.
+
 ## Integration tests (P9)
 
 ```bash
@@ -48,4 +52,3 @@ docker run --rm pg-mcp
 ## Claude Desktop example
 
 See `claude_desktop_config.example.json`.
-

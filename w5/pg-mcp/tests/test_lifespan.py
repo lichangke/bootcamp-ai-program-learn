@@ -17,7 +17,7 @@ def _cleanup_context() -> None:
 
 @pytest.mark.asyncio
 async def test_lifespan_initializes_and_closes(monkeypatch: pytest.MonkeyPatch, settings_fixture) -> None:
-    """Normal lifespan should initialize all services then release resources."""
+    """Normal lifespan should initialize services and close resources."""
     import pg_mcp.__main__ as main_module
 
     validator = Mock()
@@ -41,7 +41,7 @@ async def test_lifespan_initializes_and_closes(monkeypatch: pytest.MonkeyPatch, 
         assert ctx.settings == settings_fixture
         assert ctx.validator is validator
         executor.initialize.assert_awaited_once()
-        schema_service.discover.assert_awaited()
+        schema_service.discover.assert_not_awaited()
 
     llm_service.close.assert_awaited_once()
     executor.close.assert_awaited_once()
@@ -51,6 +51,8 @@ async def test_lifespan_initializes_and_closes(monkeypatch: pytest.MonkeyPatch, 
 async def test_lifespan_cleanup_on_start_failure(monkeypatch: pytest.MonkeyPatch, settings_fixture) -> None:
     """If startup fails midway, already-created resources should still close."""
     import pg_mcp.__main__ as main_module
+
+    settings_fixture.schema_cache.preload_on_startup = True
 
     executor = Mock()
     executor.initialize = AsyncMock()

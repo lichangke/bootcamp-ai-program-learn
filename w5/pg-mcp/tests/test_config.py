@@ -14,6 +14,7 @@ def test_settings_defaults_when_minimal_valid_input() -> None:
     assert settings.log_level == "INFO"
     assert settings.query.max_rows == 100
     assert settings.schema_cache.ttl_minutes == 60
+    assert settings.schema_cache.preload_on_startup is False
     assert settings.databases == []
 
 
@@ -107,4 +108,3 @@ def test_default_database_falls_back_to_first() -> None:
 
     assert settings.default_database is not None
     assert settings.default_database.name == "first"
-

@@ -136,6 +136,11 @@ class SchemaService:
         """Return cached schema, optionally auto-refreshing stale cache."""
         cached = self._cache.get(db_name)
         if cached is None:
+            if self.cache_config.auto_refresh and pool is not None:
+                try:
+                    return await self.discover(db_name, pool)
+                except Exception:
+                    return None
             return None
 
         if not self.is_cache_expired(db_name):
@@ -184,4 +189,3 @@ class SchemaService:
                 col_comment = f" -- {column.comment}" if column.comment else ""
                 lines.append(f"  - {column.name}: {column.data_type}{pk}{not_null}{col_comment}")
         return "\n".join(lines)
-

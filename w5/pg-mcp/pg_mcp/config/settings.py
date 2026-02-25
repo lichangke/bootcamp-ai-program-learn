@@ -46,6 +46,7 @@ class SchemaCacheConfig(BaseModel):
 
     ttl_minutes: int = 60
     auto_refresh: bool = True
+    preload_on_startup: bool = False
 
 
 class SecurityConfig(BaseModel):

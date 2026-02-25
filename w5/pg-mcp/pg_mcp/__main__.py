@@ -1,6 +1,9 @@
 """Module entrypoint for `python -m pg_mcp`."""
 
+import asyncio
 from contextlib import asynccontextmanager
+import logging
+import sys
 
 from pg_mcp.config.settings import Settings
 from pg_mcp.context import AppContext, clear_context, set_context
@@ -9,6 +12,8 @@ from pg_mcp.server import mcp
 from pg_mcp.services.executor import SQLExecutor
 from pg_mcp.services.llm import LLMService
 from pg_mcp.services.schema import SchemaService
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -25,8 +30,14 @@ async def app_lifespan(_server):
         await executor.initialize(settings.databases)
 
         schema_service = SchemaService(settings.schema_cache)
-        for db_config in settings.databases:
-            await schema_service.discover(db_config.name, executor.get_pool(db_config.name))
+        if settings.schema_cache.preload_on_startup:
+            # Preload is optional because full schema discovery across multiple
+            # databases can exceed MCP client handshake time budgets.
+            tasks = [
+                schema_service.discover(db_config.name, executor.get_pool(db_config.name))
+                for db_config in settings.databases
+            ]
+            await asyncio.gather(*tasks)
 
         llm_service = LLMService(settings.deepseek, schema_service)
         set_context(
@@ -38,7 +49,7 @@ async def app_lifespan(_server):
                 llm_service=llm_service,
             )
         )
-        print("pg-mcp lifecycle initialized")
+        logger.info("pg-mcp lifecycle initialized")
         yield
     finally:
         clear_context()
@@ -46,13 +57,30 @@ async def app_lifespan(_server):
             await llm_service.close()
         if executor is not None:
             await executor.close()
-        print("pg-mcp lifecycle closed")
+        logger.info("pg-mcp lifecycle closed")
+
+
+def _bind_lifespan() -> None:
+    """Bind lifespan in a way compatible with FastMCP 2.x/3.x."""
+    if hasattr(mcp, "_lifespan"):
+        mcp._lifespan = app_lifespan
+        return
+    mcp.lifespan = app_lifespan
+
+
+def _force_utf8_stdio() -> None:
+    """Ensure stderr logs are UTF-8 so MCP clients can decode server logs."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="replace")
 
 
 def main() -> None:
     """Start FastMCP server."""
-    mcp.lifespan = app_lifespan
-    mcp.run()
+    _force_utf8_stdio()
+    _bind_lifespan()
+    mcp.run(show_banner=False)
 
 
 if __name__ == "__main__":
