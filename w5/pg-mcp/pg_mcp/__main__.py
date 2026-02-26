@@ -4,6 +4,7 @@ import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
+from typing import Any
 
 from pg_mcp.config.settings import Settings
 from pg_mcp.context import AppContext, clear_context, set_context
@@ -104,12 +105,36 @@ def _force_utf8_stdio() -> None:
             reconfigure(encoding="utf-8", errors="replace")
 
 
+def _resolve_run_options(settings: Settings) -> tuple[str, dict[str, Any]]:
+    """Build FastMCP run options from typed transport settings."""
+    transport = settings.server.transport
+    run_kwargs: dict[str, Any] = {
+        "show_banner": settings.server.show_banner,
+    }
+
+    if transport in {"http", "sse", "streamable-http"}:
+        run_kwargs.update(
+            {
+                "host": settings.server.host,
+                "port": settings.server.port,
+                "path": settings.server.path,
+            }
+        )
+        if transport != "sse":
+            run_kwargs["stateless_http"] = settings.server.stateless_http
+
+    return transport, run_kwargs
+
+
 def main() -> None:
     """Start FastMCP server."""
-    _force_utf8_stdio()
-    configure_logging("INFO")
+    settings = Settings()
+    if settings.server.transport == "stdio":
+        _force_utf8_stdio()
+    configure_logging(settings.log_level)
     _bind_lifespan()
-    mcp.run(show_banner=False)
+    transport, run_kwargs = _resolve_run_options(settings)
+    mcp.run(transport=transport, **run_kwargs)
 
 
 if __name__ == "__main__":

@@ -12,6 +12,10 @@ def test_settings_defaults_when_minimal_valid_input() -> None:
 
     assert settings.server_name == "pg-mcp-server"
     assert settings.log_level == "INFO"
+    assert settings.server.transport == "stdio"
+    assert settings.server.host == "127.0.0.1"
+    assert settings.server.port == 8000
+    assert settings.server.path == "/mcp"
     assert settings.query.max_rows == 100
     assert settings.query.connect_max_retries == 2
     assert settings.query.max_concurrent_requests == 0
@@ -30,6 +34,10 @@ def test_settings_load_from_nested_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASES__0__USERNAME", "readonly")
     monkeypatch.setenv("DATABASES__0__PASSWORD", "secret")
     monkeypatch.setenv("DATABASES__0__IS_DEFAULT", "true")
+    monkeypatch.setenv("SERVER__TRANSPORT", "streamable-http")
+    monkeypatch.setenv("SERVER__HOST", "0.0.0.0")
+    monkeypatch.setenv("SERVER__PORT", "18000")
+    monkeypatch.setenv("SERVER__PATH", "gateway/mcp")
 
     settings = Settings(_env_file=None)
 
@@ -39,6 +47,10 @@ def test_settings_load_from_nested_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.databases[0].port == 5433
     assert settings.default_database is not None
     assert settings.default_database.name == "analytics"
+    assert settings.server.transport == "streamable-http"
+    assert settings.server.host == "0.0.0.0"
+    assert settings.server.port == 18000
+    assert settings.server.path == "/gateway/mcp"
 
 
 def test_secret_str_not_exposed_in_repr() -> None:

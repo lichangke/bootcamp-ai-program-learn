@@ -41,7 +41,7 @@
 │                              MCP Client                                  │
 │                    (Claude Desktop / IDE Plugin)                         │
 └─────────────────────────────────┬───────────────────────────────────────┘
-                                  │ MCP Protocol (stdio/SSE)
+                                  │ MCP Protocol (stdio/streamable-http/SSE)
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           FastMCP Server                                 │
@@ -1782,4 +1782,3 @@ python -m pg_mcp
 |------|------|----------|
 | 1.0.0 | 2026-02-23 | 初始版本 |
 | 1.1.0 | 2026-02-23 | 根据 Codex Review 反馈优化：<br>- 配置类改为 BaseModel（嵌套类）<br>- 添加 AppContext 依赖注入容器<br>- SQL 校验器改为白名单模式<br>- 添加类型化异常定义<br>- Schema 发现优化为批量查询（解决 N+1）<br>- 添加缓存 TTL 和自动刷新<br>- LLM 重试添加指数退避<br>- LIMIT 处理改为 AST 方式<br>- 统一错误响应格式<br>- 使用 UTC 时区时间戳<br>- 扩展测试用例覆盖 |
-

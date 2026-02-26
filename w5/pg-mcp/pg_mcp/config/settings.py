@@ -1,5 +1,7 @@
 """Pydantic settings models."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -52,6 +54,26 @@ class SchemaCacheConfig(BaseModel):
     ttl_minutes: int = 60
     auto_refresh: bool = True
     preload_on_startup: bool = False
+
+
+class ServerRuntimeConfig(BaseModel):
+    """MCP server runtime transport and endpoint settings."""
+
+    transport: Literal["stdio", "streamable-http", "http", "sse"] = "stdio"
+    host: str = "127.0.0.1"
+    port: int = Field(default=8000, ge=1, le=65535)
+    path: str = "/mcp"
+    stateless_http: bool = False
+    show_banner: bool = False
+
+    @field_validator("path")
+    @classmethod
+    def _normalize_path(cls, value: str) -> str:
+        """Normalize HTTP endpoint path to a leading-slash format."""
+        normalized = value.strip() or "/mcp"
+        if not normalized.startswith("/"):
+            normalized = f"/{normalized}"
+        return normalized
 
 
 class SecurityConfig(BaseModel):
@@ -158,6 +180,7 @@ class Settings(BaseSettings):
 
     server_name: str = "pg-mcp-server"
     log_level: str = "INFO"
+    server: ServerRuntimeConfig = Field(default_factory=ServerRuntimeConfig)
     databases: list[DatabaseConfig] = Field(default_factory=list)
     deepseek: DeepSeekConfig
     query: QueryConfig = Field(default_factory=QueryConfig)

@@ -309,7 +309,7 @@
 
 ### 4.3 部署要求
 
-- 支持本地运行（stdio 模式）
+- 支持本地运行（默认 `stdio`，可选 `streamable-http`）
 - 支持作为 MCP Server 被 Claude Desktop 等客户端调用
 
 ---

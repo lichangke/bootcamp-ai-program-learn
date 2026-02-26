@@ -6,6 +6,7 @@ from pg_mcp.config.settings import (
     QueryConfig,
     SchemaCacheConfig,
     SecurityConfig,
+    ServerRuntimeConfig,
     Settings,
 )
 
@@ -15,6 +16,6 @@ __all__ = [
     "QueryConfig",
     "SchemaCacheConfig",
     "SecurityConfig",
+    "ServerRuntimeConfig",
     "Settings",
 ]
-
