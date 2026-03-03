@@ -1,0 +1,31 @@
+{
+  "name": "@w6/simple-agent-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Simple multi-turn agent SDK with tool calling and MCP support",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --experimental-strip-types --test --test-isolation=none tests/*.test.ts",
+    "example:basic": "node --experimental-strip-types examples/basic-custom-tools.ts",
+    "example:stream": "node --experimental-strip-types examples/streaming.ts",
+    "example:mcp": "node --experimental-strip-types examples/mcp-tools.ts",
+    "example:live": "node --experimental-strip-types examples/live-api-smoke.ts",
+    "test:examples": "node --experimental-strip-types scripts/test-examples.ts"
+  },
+  "devDependencies": {
+    "@types/node": "24.3.0",
+    "typescript": "5.8.3"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
