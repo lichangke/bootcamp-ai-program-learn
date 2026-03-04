@@ -5,3 +5,5 @@
 读取当前./logs 下的文件，每行都是一个json,分析其 schema,帮我构建一个前端可视化 app，用户打开一个jsonl文件，你可以将其很好地分门别类在一个页面中展示不同turn下的输出，注意使用 scrollbar来控制区域长度，文字内容使用 markdown renderer 来渲染。design token使用./visualizer/styles/design-token.css,global css 使用./visualizer/styles/global.css。构建一个react app，放在visualizer 下。根据这些需求，先撰写一个design doc放在'./specs 下，然后完整实现。
 
 ![alt text](image.png)
+
+JSONL 日志文件 是通过 opencode 使用 plugins/ 在 logs/ 生成，使用方法 将 plugins/ 文件夹 拷贝到 C:\Users\用户\.config\opencode 下，在opencode 打开的工作目录下 会生成 logs 文件夹 里面就是 JSONL 日志
